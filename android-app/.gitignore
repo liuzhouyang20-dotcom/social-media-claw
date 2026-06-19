@@ -1,0 +1,20 @@
+# Android / Gradle
+.gradle/
+**/build/
+local.properties
+*.keystore
+*.jks
+*.pem
+*.p12
+*.key
+
+# Secrets / local config
+.env
+.env.*
+secrets.properties
+*.secret
+
+# IDE / OS
+.idea/
+*.iml
+.DS_Store

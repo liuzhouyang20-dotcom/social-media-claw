@@ -1,0 +1,23 @@
+# Python cache
+__pycache__/
+*.pyc
+
+# Local secrets / env
+.env
+.env.*
+secrets.properties
+local.properties
+*.secret
+*.key
+*.pem
+
+# Android / Gradle
+**/build/
+.gradle/
+
+# IDE / OS
+.idea/
+*.iml
+.DS_Store
+
+downloads/

@@ -1,0 +1,2531 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>采集内容</title>
+  <script src="./data.js"></script>
+  <style>
+    :root {
+      --red: #ff2442;
+      --text: #242424;
+      --muted: #8f8f8f;
+      --line: #eeeeee;
+      --bar: rgba(255, 255, 255, .96);
+      --bottom-height: 59px;
+    }
+
+    * { box-sizing: border-box; }
+
+    html {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      overscroll-behavior: none;
+      background: #fff;
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      -webkit-text-size-adjust: 100%;
+    }
+
+    body {
+      margin: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      overscroll-behavior: none;
+      background: #fff;
+      color: var(--text);
+    }
+
+    button,
+    input,
+    textarea,
+    select { font: inherit; }
+
+    button {
+      cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    .app {
+      height: 100vh;
+      height: 100dvh;
+      background: #fff;
+      overflow: hidden;
+      position: relative;
+    }
+
+    .view {
+      display: none;
+      height: 100%;
+      min-height: 0;
+      overflow: hidden;
+    }
+
+    .view.active {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .home-top {
+      flex: 0 0 auto;
+      position: relative;
+      z-index: 10;
+      background: var(--bar);
+      backdrop-filter: blur(16px);
+      border-bottom: 1px solid var(--line);
+    }
+
+    .primary-nav {
+      height: calc(43px + env(safe-area-inset-top));
+      padding: env(safe-area-inset-top) 6px 0;
+      display: grid;
+      grid-template-columns: 30px minmax(0, 1fr) 30px;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .icon-btn {
+      width: 30px;
+      height: 34px;
+      border: 0;
+      background: transparent;
+      color: #252525;
+      display: grid;
+      place-items: center;
+    }
+
+    .bubble-icon {
+      width: 18px;
+      height: 18px;
+      border: 2px solid currentColor;
+      border-radius: 50%;
+      position: relative;
+    }
+
+    .bubble-icon::after {
+      content: "";
+      position: absolute;
+      left: -2px;
+      bottom: 1px;
+      width: 7px;
+      height: 7px;
+      border-left: 2px solid currentColor;
+      border-bottom: 2px solid currentColor;
+      border-bottom-left-radius: 6px;
+      transform: rotate(-18deg);
+      background: #fff;
+    }
+
+    .search-icon {
+      width: 18px;
+      height: 18px;
+      border: 2px solid currentColor;
+      border-radius: 50%;
+      position: relative;
+    }
+
+    .search-icon::after {
+      content: "";
+      position: absolute;
+      right: -6px;
+      bottom: -4px;
+      width: 9px;
+      height: 2px;
+      border-radius: 2px;
+      background: currentColor;
+      transform: rotate(45deg);
+    }
+
+    .main-tabs {
+      min-width: 0;
+      display: flex;
+      align-items: center;
+      justify-content: flex-start;
+      gap: 24px;
+      overflow-x: auto;
+      overscroll-behavior-x: contain;
+      scrollbar-width: none;
+      scroll-snap-type: x proximity;
+    }
+
+    .main-tabs::-webkit-scrollbar { display: none; }
+
+    .main-tab {
+      border: 0;
+      background: transparent;
+      color: #9a9a9a;
+      padding: 8px 0 10px;
+      font-size: 14px;
+      font-weight: 500;
+      white-space: nowrap;
+      position: relative;
+      flex: 0 0 auto;
+      scroll-snap-align: center;
+    }
+
+    .main-tab.active {
+      color: #282828;
+      font-weight: 760;
+    }
+
+    .main-tab.active::after {
+      content: "";
+      position: absolute;
+      left: 50%;
+      bottom: 4px;
+      width: 27px;
+      height: 2px;
+      border-radius: 999px;
+      background: var(--red);
+      transform: translateX(-50%);
+    }
+
+    .topic-row {
+      height: 44px;
+      display: flex;
+      align-items: center;
+      gap: 18px;
+      overflow-x: auto;
+      overscroll-behavior-x: contain;
+      padding: 0 14px;
+      scrollbar-width: none;
+      border-top: 1px solid #f4f4f4;
+    }
+
+    .topic-row::-webkit-scrollbar { display: none; }
+
+    .topic {
+      border: 0;
+      background: transparent;
+      padding: 0;
+      color: #9b9b9b;
+      font-size: 15px;
+      white-space: nowrap;
+      flex: 0 0 auto;
+    }
+
+    .topic.active {
+      color: #343434;
+      font-weight: 760;
+    }
+
+    .topic.more {
+      margin-left: auto;
+      color: #757575;
+      font-size: 20px;
+      line-height: 1;
+      position: sticky;
+      right: 0;
+      padding-left: 12px;
+      background: linear-gradient(90deg, rgba(255,255,255,0), #fff 36%);
+    }
+
+    .search-bar {
+      display: none;
+      padding: 10px 14px 12px;
+      border-top: 1px solid #f4f4f4;
+      gap: 8px;
+    }
+
+    .search-bar.open { display: flex; }
+
+    .search-input {
+      min-width: 0;
+      flex: 1;
+      height: 42px;
+      border: 0;
+      outline: 0;
+      border-radius: 999px;
+      padding: 0 16px;
+      background: #f4f4f4;
+      color: #333;
+      font-size: 15px;
+    }
+
+    .search-close {
+      width: 48px;
+      height: 42px;
+      border: 0;
+      background: transparent;
+      color: #555;
+      font-size: 15px;
+    }
+
+    .search-view {
+      min-height: 0;
+      background: #fff;
+    }
+
+    .search-top {
+      flex: 0 0 auto;
+      position: relative;
+      z-index: 11;
+      background: rgba(255,255,255,.98);
+      backdrop-filter: blur(16px);
+    }
+
+    .search-header {
+      min-height: calc(72px + env(safe-area-inset-top));
+      padding: calc(env(safe-area-inset-top) + 10px) 18px 10px;
+      display: grid;
+      grid-template-columns: 30px minmax(0, 1fr) auto;
+      gap: 10px;
+      align-items: center;
+    }
+
+    .back-btn {
+      width: 30px;
+      height: 42px;
+      border: 0;
+      background: transparent;
+      color: #292929;
+      font-size: 36px;
+      line-height: 1;
+      display: grid;
+      place-items: center;
+    }
+
+    .search-pill {
+      height: 42px;
+      border-radius: 999px;
+      background: #f4f4f4;
+      display: grid;
+      grid-template-columns: 34px minmax(0, 1fr) 30px;
+      align-items: center;
+      padding: 0 8px 0 14px;
+      min-width: 0;
+    }
+
+    .mini-search {
+      width: 19px;
+      height: 19px;
+      border: 2px solid #9a9a9a;
+      border-radius: 50%;
+      position: relative;
+      justify-self: start;
+    }
+
+    .mini-search::after {
+      content: "";
+      position: absolute;
+      right: -5px;
+      bottom: -3px;
+      width: 8px;
+      height: 2px;
+      border-radius: 2px;
+      background: #9a9a9a;
+      transform: rotate(45deg);
+    }
+
+    .search-page-input {
+      min-width: 0;
+      height: 42px;
+      border: 0;
+      outline: 0;
+      background: transparent;
+      color: #333;
+      font-size: 17px;
+      font-weight: 480;
+    }
+
+    .search-page-input::placeholder { color: #9b9b9b; }
+
+    .clear-search {
+      width: 24px;
+      height: 24px;
+      border: 0;
+      border-radius: 50%;
+      background: #c8c8c8;
+      color: #fff;
+      font-size: 20px;
+      line-height: 1;
+      display: grid;
+      place-items: center;
+    }
+
+    .search-cancel {
+      min-width: 44px;
+      height: 42px;
+      border: 0;
+      background: transparent;
+      color: #8a8a8a;
+      padding: 0;
+      font-size: 20px;
+      text-align: right;
+    }
+
+    .search-scope {
+      height: 54px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 74px;
+      border-bottom: 1px solid #f1f1f1;
+    }
+
+    .scope-tab {
+      border: 0;
+      background: transparent;
+      padding: 13px 0 14px;
+      color: #9a9a9a;
+      font-size: 16px;
+      font-weight: 620;
+      position: relative;
+    }
+
+    .scope-tab.active {
+      color: #333;
+      font-weight: 820;
+    }
+
+    .scope-tab.active::after {
+      content: "";
+      position: absolute;
+      left: 50%;
+      bottom: 6px;
+      width: 31px;
+      height: 3px;
+      border-radius: 999px;
+      background: var(--red);
+      transform: translateX(-50%);
+    }
+
+    .search-kind-row,
+    .search-tag-row {
+      display: flex;
+      align-items: center;
+      gap: 26px;
+      height: 43px;
+      overflow-x: auto;
+      padding: 0 18px;
+      scrollbar-width: none;
+      border-bottom: 1px solid #f0f0f0;
+    }
+
+    .search-kind-row::-webkit-scrollbar,
+    .search-tag-row::-webkit-scrollbar {
+      display: none;
+    }
+
+    .search-filter {
+      border: 0;
+      background: transparent;
+      color: #8c8c8c;
+      padding: 0;
+      font-size: 15px;
+      white-space: nowrap;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+    }
+
+    .search-filter.active {
+      color: #333;
+      font-weight: 820;
+    }
+
+    .search-tag {
+      border: 0;
+      background: transparent;
+      color: #777;
+      height: 31px;
+      padding: 0 17px;
+      border-radius: 999px;
+      font-size: 15px;
+      white-space: nowrap;
+    }
+
+    .search-tag.active {
+      color: #333;
+      background: #f2f2f2;
+      font-weight: 760;
+    }
+
+    .search-results { padding-top: 10px; }
+
+    .search-discovery {
+      display: none;
+      padding: 24px 22px 44px;
+      background: #fff;
+    }
+
+    .search-view.idle .search-discovery { display: block; }
+    .search-view.idle .search-results-panel,
+    .search-view.idle .search-scope,
+    .search-view.idle .search-kind-row,
+    .search-view.idle .search-tag-row { display: none; }
+
+    .suggest-head,
+    .discover-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 18px;
+    }
+
+    .suggest-head h2,
+    .discover-head h2 {
+      margin: 0;
+      color: #2c2c2c;
+      font-size: 20px;
+      line-height: 1.2;
+      font-weight: 820;
+    }
+
+    .refresh-suggest {
+      border: 0;
+      background: transparent;
+      color: #9a9a9a;
+      padding: 0;
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      font-size: 17px;
+      white-space: nowrap;
+    }
+
+    .refresh-icon {
+      width: 21px;
+      height: 21px;
+      border: 2px solid currentColor;
+      border-right-color: transparent;
+      border-radius: 50%;
+      display: inline-block;
+      position: relative;
+    }
+
+    .refresh-icon::after {
+      content: "";
+      position: absolute;
+      right: -2px;
+      top: 1px;
+      width: 6px;
+      height: 6px;
+      border-top: 2px solid currentColor;
+      border-right: 2px solid currentColor;
+      transform: rotate(35deg);
+    }
+
+    .suggest-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      column-gap: 34px;
+      row-gap: 25px;
+      margin-bottom: 32px;
+    }
+
+    .suggest-item {
+      border: 0;
+      background: transparent;
+      color: #343434;
+      padding: 0;
+      font-size: 20px;
+      line-height: 1.3;
+      text-align: left;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .discover-head h2 {
+      color: #f2754f;
+      font-size: 19px;
+    }
+
+    .hot-list {
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .hot-item {
+      min-height: 58px;
+      display: grid;
+      grid-template-columns: 20px minmax(0, 1fr) auto 22px;
+      align-items: center;
+      gap: 12px;
+      border-bottom: 1px solid #f0f0f0;
+      color: #333;
+    }
+
+    .hot-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: #cfcfcf;
+      justify-self: center;
+    }
+
+    .hot-item:nth-child(1) .hot-dot { background: #ef6b61; }
+    .hot-item:nth-child(2) .hot-dot { background: #f2b044; }
+    .hot-item:nth-child(3) .hot-dot { background: #f3d64f; }
+
+    .hot-title {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-size: 18px;
+    }
+
+    .hot-badge {
+      margin-left: 5px;
+      border-radius: 5px;
+      padding: 1px 5px;
+      background: #f59b38;
+      color: #fff;
+      font-size: 13px;
+      font-weight: 760;
+      vertical-align: 2px;
+    }
+
+    .hot-score {
+      color: #9a9a9a;
+      font-size: 16px;
+      white-space: nowrap;
+    }
+
+    .hot-trend {
+      color: #c6c6c6;
+      font-size: 20px;
+      line-height: 1;
+      text-align: center;
+    }
+
+    .hot-trend.up { color: #f04b5d; }
+    .hot-trend.down { color: #c6c6c6; }
+
+    .scroll-area {
+      min-height: 0;
+      flex: 1 1 auto;
+      overflow-x: hidden;
+      overflow-y: auto;
+      overscroll-behavior-y: contain;
+      -webkit-overflow-scrolling: touch;
+      padding-bottom: calc(var(--bottom-height) + env(safe-area-inset-bottom));
+    }
+
+    .feed {
+      padding: 0 5px 12px;
+      columns: 2;
+      column-gap: 5px;
+      max-width: 960px;
+      margin: 0 auto;
+    }
+
+    .card {
+      break-inside: avoid;
+      display: block;
+      margin: 0 0 6px;
+      border-radius: 4px;
+      background: #fff;
+      overflow: hidden;
+      cursor: pointer;
+      box-shadow: 0 0 0 1px rgba(0,0,0,.035);
+    }
+
+    .thumb {
+      position: relative;
+      min-height: 130px;
+      background: #f2f2f2;
+      overflow: hidden;
+    }
+
+    .thumb img {
+      display: block;
+      width: 100%;
+      height: auto;
+      min-height: 130px;
+      object-fit: cover;
+      background: #f2f2f2;
+    }
+
+    .play {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      width: 28px;
+      height: 28px;
+      border-radius: 999px;
+      background: rgba(0,0,0,.36);
+      display: grid;
+      place-items: center;
+    }
+
+    .play::before {
+      content: "";
+      width: 0;
+      height: 0;
+      margin-left: 2px;
+      border-top: 7px solid transparent;
+      border-bottom: 7px solid transparent;
+      border-left: 10px solid #fff;
+    }
+
+    .card-body { padding: 7px 8px 8px; }
+
+    .title {
+      margin: 0 0 7px;
+      color: #292929;
+      font-size: 13px;
+      line-height: 1.35;
+      font-weight: 680;
+      letter-spacing: 0;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+      overflow-wrap: anywhere;
+    }
+
+    .meta {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 6px;
+      color: #8a8a8a;
+      font-size: 11px;
+      min-width: 0;
+    }
+
+    .author {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      min-width: 0;
+    }
+
+    .avatar {
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      background:
+        radial-gradient(circle at 35% 28%, rgba(255,255,255,.88) 0 14%, transparent 16%),
+        linear-gradient(135deg, #fed7e2, #90cdf4 52%, #fbd38d);
+      flex: 0 0 auto;
+      box-shadow: inset 0 0 0 1px rgba(0,0,0,.04);
+    }
+
+    .author span {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .like {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      flex: 0 0 auto;
+      color: #777;
+      font-size: 11px;
+    }
+
+    .heart {
+      width: 16px;
+      height: 16px;
+      display: inline-grid;
+      place-items: center;
+      color: #8a8a8a;
+      font-size: 17px;
+      line-height: 1;
+    }
+
+    .empty {
+      display: inline-block;
+      width: calc(100vw - 28px);
+      padding: 44px 8px;
+      color: #888;
+      text-align: center;
+      font-size: 15px;
+    }
+
+    .collect-view {
+      position: relative;
+      height: 100%;
+      min-height: 0;
+      padding: calc(env(safe-area-inset-top) + 24px) 18px calc(var(--bottom-height) + env(safe-area-inset-bottom) + 26px);
+      background:
+        linear-gradient(rgba(0,0,0,.54), rgba(0,0,0,.72)),
+        radial-gradient(circle at 20% 15%, rgba(255,255,255,.18), transparent 28%),
+        linear-gradient(135deg, #7d8b66, #344130 42%, #181818);
+      overflow-x: hidden;
+      overflow-y: auto;
+      overscroll-behavior-y: contain;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    .collect-view.active { display: block; }
+
+    .collect-view::before,
+    .collect-view::after {
+      content: "";
+      position: absolute;
+      border-radius: 999px;
+      opacity: .32;
+      filter: blur(1px);
+      background: rgba(255,255,255,.18);
+    }
+
+    .collect-view::before {
+      width: 170px;
+      height: 170px;
+      top: 110px;
+      right: -52px;
+    }
+
+    .collect-view::after {
+      width: 220px;
+      height: 220px;
+      bottom: 80px;
+      left: -92px;
+    }
+
+    .collect-top {
+      position: relative;
+      z-index: 1;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      color: rgba(255,255,255,.86);
+    }
+
+    .collect-menu {
+      width: 36px;
+      height: 30px;
+      display: grid;
+      align-content: center;
+      gap: 6px;
+    }
+
+    .collect-menu span {
+      display: block;
+      width: 28px;
+      height: 3px;
+      border-radius: 3px;
+      background: currentColor;
+    }
+
+    .collect-channel {
+      display: flex;
+      gap: 22px;
+      min-width: 0;
+      color: rgba(255,255,255,.48);
+      font-size: 18px;
+      white-space: nowrap;
+    }
+
+    .collect-channel strong {
+      position: relative;
+      color: #fff;
+      font-weight: 780;
+    }
+
+    .collect-channel strong::after {
+      content: "";
+      position: absolute;
+      left: 50%;
+      bottom: -8px;
+      width: 34px;
+      height: 3px;
+      border-radius: 999px;
+      background: rgba(255,255,255,.78);
+      transform: translateX(-50%);
+    }
+
+    .collect-search {
+      width: 34px;
+      height: 34px;
+      border: 3px solid currentColor;
+      border-radius: 50%;
+      position: relative;
+    }
+
+    .collect-search::after {
+      content: "";
+      position: absolute;
+      right: -8px;
+      bottom: -5px;
+      width: 11px;
+      height: 3px;
+      border-radius: 3px;
+      background: currentColor;
+      transform: rotate(45deg);
+    }
+
+    .collect-copy {
+      position: relative;
+      z-index: 1;
+      margin: 54px auto 28px;
+      color: rgba(255,255,255,.55);
+      text-align: center;
+      font-size: 20px;
+      line-height: 2.1;
+      text-shadow: 0 1px 12px rgba(0,0,0,.4);
+    }
+
+    .collect-card {
+      position: relative;
+      z-index: 1;
+      margin: 0 auto;
+      width: min(100%, 360px);
+      overflow: hidden;
+      border-radius: 24px;
+      background: rgba(255,255,255,.97);
+      box-shadow: 0 20px 80px rgba(0,0,0,.32);
+    }
+
+    .collect-preview {
+      height: 245px;
+      display: grid;
+      place-items: center;
+      padding: 26px;
+      background:
+        linear-gradient(rgba(0,0,0,.08), rgba(0,0,0,.12)),
+        radial-gradient(circle at 18% 18%, #9b5cff 0 7%, transparent 8%),
+        radial-gradient(circle at 78% 23%, #ec3d61 0 8%, transparent 9%),
+        radial-gradient(circle at 30% 70%, #2fad81 0 9%, transparent 10%),
+        radial-gradient(circle at 72% 72%, #e6c135 0 8%, transparent 9%),
+        linear-gradient(135deg, #d8d2c8, #a1b3a2);
+      color: #fff;
+      text-align: center;
+    }
+
+    .collect-preview h2 {
+      margin: 0;
+      color: #fff;
+      font-size: 30px;
+      line-height: 1.25;
+      font-weight: 900;
+      text-shadow: 0 2px 12px rgba(0,0,0,.28);
+    }
+
+    .collect-body {
+      padding: 28px 24px 26px;
+      text-align: center;
+    }
+
+    .detect-title {
+      min-height: 32px;
+      margin: 0 0 18px;
+      color: #292929;
+      font-size: 20px;
+      font-weight: 760;
+      overflow-wrap: anywhere;
+    }
+
+    .source-box {
+      width: 100%;
+      min-height: 118px;
+      border: 0;
+      outline: 0;
+      resize: vertical;
+      border-radius: 16px;
+      padding: 14px;
+      background: #f4f4f4;
+      color: #333;
+      font-size: 15px;
+      line-height: 1.5;
+      text-align: left;
+    }
+
+    .source-box::placeholder { color: #aaa; }
+
+    .collect-options {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      margin-top: 12px;
+      color: #777;
+      font-size: 13px;
+    }
+
+    .collect-options select {
+      height: 36px;
+      min-width: 96px;
+      border: 0;
+      border-radius: 10px;
+      padding: 0 10px;
+      background: #f4f4f4;
+      color: #555;
+    }
+
+    .collect-toggle {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      white-space: nowrap;
+    }
+
+    .collect-toggle input {
+      width: 16px;
+      height: 16px;
+      accent-color: var(--red);
+    }
+
+    .collect-action {
+      width: 100%;
+      height: 58px;
+      margin-top: 18px;
+      border: 0;
+      border-radius: 15px;
+      background: var(--red);
+      color: #fff;
+      font-size: 20px;
+      font-weight: 820;
+      box-shadow: 0 12px 24px rgba(255,36,66,.18);
+    }
+
+    .collect-action:disabled {
+      background: #e6e6e6;
+      color: #fff;
+      box-shadow: none;
+    }
+
+    .collect-foot {
+      min-height: 24px;
+      margin: 14px 0 0;
+      color: #8d8d8d;
+      font-size: 14px;
+      line-height: 1.5;
+      overflow-wrap: anywhere;
+    }
+
+    .collect-foot.error { color: #c72239; }
+    .collect-foot.ok { color: #16794c; }
+
+    .toast-mask {
+      position: fixed;
+      inset: 0;
+      z-index: 34;
+      display: none;
+      place-items: center;
+      padding: 24px;
+      background: rgba(0,0,0,.45);
+    }
+
+    .toast-mask.open { display: grid; }
+
+    .result-card {
+      width: min(330px, 100%);
+      overflow: hidden;
+      border-radius: 22px;
+      background: #fff;
+      text-align: center;
+      box-shadow: 0 20px 80px rgba(0,0,0,.34);
+    }
+
+    .result-visual {
+      height: 190px;
+      display: grid;
+      place-items: center;
+      background:
+        radial-gradient(circle at 26% 28%, #6f55e7 0 8%, transparent 9%),
+        radial-gradient(circle at 74% 24%, #ea4661 0 7%, transparent 8%),
+        radial-gradient(circle at 30% 72%, #2fa46b 0 9%, transparent 10%),
+        linear-gradient(135deg, #d3d1c7, #8ab19f);
+      color: #fff;
+      font-size: 28px;
+      font-weight: 900;
+      text-shadow: 0 2px 12px rgba(0,0,0,.28);
+    }
+
+    .result-content {
+      padding: 23px 20px 24px;
+    }
+
+    .result-title {
+      margin: 0 0 18px;
+      color: #292929;
+      font-size: 21px;
+      line-height: 1.35;
+      font-weight: 820;
+    }
+
+    .result-button {
+      width: 100%;
+      height: 54px;
+      border: 0;
+      border-radius: 14px;
+      background: var(--red);
+      color: #fff;
+      font-size: 18px;
+      font-weight: 820;
+    }
+
+    .result-note {
+      margin-top: 16px;
+      color: #8a8a8a;
+      font-size: 14px;
+    }
+
+    .bottom-nav {
+      position: fixed;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      z-index: 12;
+      height: calc(var(--bottom-height) + env(safe-area-inset-bottom));
+      padding: 6px 14px env(safe-area-inset-bottom);
+      display: grid;
+      grid-template-columns: 1fr 1fr 58px 1fr 1fr;
+      align-items: center;
+      background: var(--bar);
+      backdrop-filter: blur(16px);
+      border-top: 1px solid var(--line);
+    }
+
+    .nav-item {
+      position: relative;
+      border: 0;
+      background: transparent;
+      color: #8c8c8c;
+      height: 47px;
+      padding: 0;
+      display: grid;
+      place-items: center;
+      font-size: 14px;
+      font-weight: 650;
+    }
+
+    .nav-item.active {
+      color: #222;
+      font-weight: 800;
+    }
+
+    .add-btn {
+      position: relative;
+      width: 44px;
+      height: 31px;
+      border: 0;
+      border-radius: 9px;
+      background: var(--red);
+      color: transparent;
+      display: grid;
+      place-items: center;
+      justify-self: center;
+      overflow: hidden;
+      box-shadow: 0 5px 12px rgba(255,36,66,.22);
+    }
+
+    .add-btn::before,
+    .add-btn::after {
+      content: "";
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      border-radius: 999px;
+      background: #fff;
+      transform: translate(-50%, -50%);
+    }
+
+    .add-btn::before {
+      width: 18px;
+      height: 2px;
+    }
+
+    .add-btn::after {
+      width: 2px;
+      height: 18px;
+    }
+
+    .modal {
+      position: fixed;
+      inset: 0;
+      z-index: 30;
+      display: none;
+      background: rgba(0,0,0,.4);
+    }
+
+    .modal.open { display: block; }
+
+    .detail-panel {
+      position: absolute;
+      inset: 0;
+      display: grid;
+      grid-template-rows: minmax(0, 1fr) auto;
+      background: #fff;
+    }
+
+    .detail-media {
+      min-height: 0;
+      background: #0d0d0d;
+      display: grid;
+      place-items: center;
+      overflow: auto;
+    }
+
+    .detail-media img,
+    .detail-media video {
+      max-width: 100%;
+      max-height: 100%;
+      display: block;
+    }
+
+    .detail-content {
+      max-height: 46vh;
+      padding: 14px 16px calc(18px + env(safe-area-inset-bottom));
+      overflow: auto;
+      border-top: 1px solid #1a1a1a;
+      background: #fff;
+    }
+
+    .detail-head {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      align-items: flex-start;
+    }
+
+    .close {
+      width: 36px;
+      height: 36px;
+      border: 0;
+      border-radius: 50%;
+      background: #f4f4f4;
+      color: #444;
+      font-size: 24px;
+      line-height: 1;
+      flex: 0 0 auto;
+    }
+
+    .detail-title {
+      margin: 0;
+      color: #222;
+      font-size: 21px;
+      line-height: 1.35;
+      font-weight: 820;
+      overflow-wrap: anywhere;
+    }
+
+    .detail-author {
+      margin-top: 10px;
+      color: #666;
+      font-size: 14px;
+      font-weight: 680;
+    }
+
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 8px;
+      margin: 14px 0;
+    }
+
+    .stat {
+      border-radius: 10px;
+      padding: 8px 6px;
+      background: #f7f7f7;
+      text-align: center;
+    }
+
+    .stat b {
+      display: block;
+      color: #222;
+      font-size: 15px;
+    }
+
+    .stat span {
+      color: #8a8a8a;
+      font-size: 12px;
+    }
+
+    .desc {
+      max-height: 180px;
+      overflow: auto;
+      white-space: pre-wrap;
+      color: #333;
+      font-size: 14px;
+      line-height: 1.58;
+    }
+
+    .strip {
+      display: flex;
+      gap: 8px;
+      overflow-x: auto;
+      padding: 12px 0 4px;
+      scrollbar-width: none;
+    }
+
+    .strip::-webkit-scrollbar { display: none; }
+
+    .strip img {
+      width: 60px;
+      height: 80px;
+      object-fit: cover;
+      border-radius: 8px;
+      border: 2px solid transparent;
+      background: #eee;
+      flex: 0 0 auto;
+    }
+
+    .strip img.active { border-color: var(--red); }
+
+    .paths {
+      display: flex;
+      gap: 8px;
+      margin-top: 10px;
+    }
+
+    .paths a {
+      min-width: 0;
+      flex: 1;
+      border-radius: 10px;
+      padding: 10px;
+      background: #f7f7f7;
+      color: #666;
+      text-decoration: none;
+      text-align: center;
+      font-size: 13px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .modal.video-detail {
+      background: #000;
+    }
+
+    .modal.image-detail {
+      background: #fff;
+    }
+
+    .modal.image-detail .detail-panel {
+      display: block;
+      background: #fff;
+    }
+
+    .modal.image-detail .detail-media {
+      display: none;
+    }
+
+    .modal.image-detail .detail-content {
+      position: absolute;
+      inset: 0;
+      max-height: none;
+      padding: 0;
+      overflow: hidden;
+      border-top: 0;
+      background: #fff;
+    }
+
+    .image-page {
+      position: absolute;
+      inset: 0;
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr) auto;
+      background: #fff;
+      color: #282828;
+    }
+
+    .image-topbar {
+      min-height: calc(78px + env(safe-area-inset-top));
+      padding: calc(env(safe-area-inset-top) + 10px) 16px 10px;
+      display: grid;
+      grid-template-columns: 42px 42px minmax(0, 1fr) auto 42px;
+      align-items: center;
+      gap: 10px;
+      border-bottom: 1px solid #f2f2f2;
+      background: rgba(255,255,255,.98);
+    }
+
+    .image-back,
+    .image-share,
+    .image-dot {
+      border: 0;
+      background: transparent;
+      color: currentColor;
+      padding: 0;
+      display: grid;
+      place-items: center;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    .image-back {
+      width: 42px;
+      height: 46px;
+      font-size: 44px;
+      line-height: 1;
+    }
+
+    .image-share {
+      width: 42px;
+      height: 46px;
+      font-size: 32px;
+      line-height: 1;
+    }
+
+    .image-author-avatar {
+      width: 42px;
+      height: 42px;
+      border-radius: 50%;
+      background:
+        radial-gradient(circle at 35% 28%, rgba(255,255,255,.88) 0 14%, transparent 16%),
+        linear-gradient(135deg, #fed7e2, #90cdf4 52%, #fbd38d);
+      box-shadow: inset 0 0 0 1px rgba(0,0,0,.05);
+    }
+
+    .image-author-name {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      color: #303030;
+      font-size: 18px;
+      font-weight: 620;
+    }
+
+    .image-follow {
+      height: 38px;
+      min-width: 78px;
+      border: 1px solid rgba(255,36,66,.38);
+      border-radius: 999px;
+      padding: 0 17px;
+      background: #fff;
+      color: var(--red);
+      font-size: 16px;
+      font-weight: 650;
+      white-space: nowrap;
+    }
+
+    .image-scroll {
+      min-height: 0;
+      overflow-x: hidden;
+      overflow-y: auto;
+      overscroll-behavior-y: contain;
+      -webkit-overflow-scrolling: touch;
+      background: #fff;
+    }
+
+    .image-hero {
+      position: relative;
+      min-height: 240px;
+      display: grid;
+      place-items: center;
+      background: #f6f6f6;
+      overflow: hidden;
+      cursor: pointer;
+    }
+
+    .image-hero img {
+      display: block;
+      width: 100%;
+      max-height: 66vh;
+      object-fit: contain;
+      background: #f6f6f6;
+    }
+
+    .image-count {
+      position: absolute;
+      top: 12px;
+      right: 12px;
+      min-width: 50px;
+      height: 34px;
+      border-radius: 999px;
+      padding: 0 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(0,0,0,.42);
+      color: #fff;
+      font-size: 16px;
+      font-weight: 650;
+    }
+
+    .image-count:empty {
+      display: none;
+    }
+
+    .image-dots {
+      min-height: 42px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 7px;
+      background: #fff;
+    }
+
+    .image-dot {
+      width: 10px;
+      height: 24px;
+    }
+
+    .image-dot::before {
+      content: "";
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #d7d7d7;
+    }
+
+    .image-dot.active::before {
+      background: var(--red);
+    }
+
+    .image-copy {
+      padding: 16px 18px 32px;
+      background: #fff;
+    }
+
+    .image-title {
+      margin: 0 0 14px;
+      color: #2d2d2d;
+      font-size: 22px;
+      line-height: 1.45;
+      font-weight: 760;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }
+
+    .image-desc {
+      color: #383838;
+      font-size: 18px;
+      line-height: 1.72;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }
+
+    .image-actions {
+      min-height: calc(68px + env(safe-area-inset-bottom));
+      padding: 8px 16px env(safe-area-inset-bottom);
+      display: grid;
+      grid-template-columns: minmax(118px, 1fr) auto auto auto;
+      align-items: center;
+      gap: 14px;
+      border-top: 1px solid #ededed;
+      background: rgba(255,255,255,.98);
+    }
+
+    .image-comment {
+      min-width: 0;
+      height: 46px;
+      border: 0;
+      border-radius: 999px;
+      padding: 0 15px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: #f6f6f6;
+      color: #9b9b9b;
+      font-size: 16px;
+      text-align: left;
+    }
+
+    .image-pencil {
+      width: 18px;
+      height: 18px;
+      border-left: 2px solid currentColor;
+      border-bottom: 2px solid currentColor;
+      transform: skew(-18deg) rotate(-42deg);
+      flex: 0 0 auto;
+    }
+
+    .image-action {
+      min-width: 50px;
+      height: 50px;
+      border: 0;
+      background: transparent;
+      color: #202020;
+      padding: 0;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 7px;
+      font-size: 18px;
+      font-weight: 650;
+      white-space: nowrap;
+    }
+
+    .image-action-icon {
+      font-size: 34px;
+      line-height: 1;
+      font-weight: 300;
+    }
+
+    .modal.video-detail .detail-panel {
+      grid-template-rows: minmax(220px, 34vh) minmax(0, 1fr);
+      background: #000;
+    }
+
+    .modal.video-detail .detail-media {
+      overflow: hidden;
+      background: #000;
+    }
+
+    .modal.video-detail .detail-media video,
+    .modal.video-detail .detail-media img {
+      width: 100%;
+      height: 100%;
+      max-width: 100%;
+      max-height: 100%;
+      object-fit: contain;
+      background: #000;
+    }
+
+    .modal.video-detail .detail-content {
+      min-height: 0;
+      max-height: none;
+      height: 100%;
+      padding: 0;
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr) auto;
+      overflow: hidden;
+      border-top: 0;
+      border-radius: 22px 22px 0 0;
+      background: #fff;
+      box-shadow: 0 -14px 34px rgba(0,0,0,.18);
+    }
+
+    .drawer-head {
+      min-height: 62px;
+      padding: 0 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      border-bottom: 1px solid #f1f1f1;
+    }
+
+    .drawer-title {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      color: #333;
+      font-size: 19px;
+      font-weight: 620;
+    }
+
+    .drawer-sort {
+      color: #606060;
+      font-size: 22px;
+      line-height: 1;
+    }
+
+    .drawer-close {
+      width: 42px;
+      height: 42px;
+      border: 0;
+      background: transparent;
+      color: #333;
+      display: grid;
+      place-items: center;
+      font-size: 36px;
+      line-height: 1;
+      padding: 0;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    .drawer-body {
+      min-height: 0;
+      overflow-x: hidden;
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+      padding: 0 16px 12px;
+    }
+
+    .drawer-item {
+      display: grid;
+      grid-template-columns: 44px minmax(0, 1fr);
+      gap: 12px;
+      padding: 16px 0;
+      border-top: 1px solid #f2f2f2;
+    }
+
+    .drawer-item:first-child {
+      border-top: 0;
+    }
+
+    .drawer-avatar {
+      width: 44px;
+      height: 44px;
+      border-radius: 50%;
+      background:
+        radial-gradient(circle at 35% 28%, rgba(255,255,255,.88) 0 14%, transparent 16%),
+        linear-gradient(135deg, #fed7e2, #90cdf4 52%, #fbd38d);
+      box-shadow: inset 0 0 0 1px rgba(0,0,0,.05);
+    }
+
+    .drawer-name {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-width: 0;
+      margin-bottom: 6px;
+      color: #8b8b8b;
+      font-size: 16px;
+    }
+
+    .drawer-name span:first-child {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .author-badge {
+      flex: 0 0 auto;
+      border-radius: 5px;
+      padding: 1px 6px;
+      background: #fff1f5;
+      color: var(--red);
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    .drawer-text {
+      color: #333;
+      font-size: 17px;
+      line-height: 1.58;
+      overflow-wrap: anywhere;
+      white-space: pre-wrap;
+    }
+
+    .drawer-meta {
+      margin-top: 13px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      color: #9a9a9a;
+      font-size: 14px;
+    }
+
+    .dislike-pill {
+      border: 1px solid #e7e7e7;
+      border-radius: 999px;
+      padding: 3px 9px;
+      color: #555;
+      background: #fff;
+      font-size: 14px;
+      white-space: nowrap;
+    }
+
+    .comment-side {
+      display: inline-flex;
+      align-items: center;
+      gap: 18px;
+      color: #555;
+      font-size: 20px;
+      line-height: 1;
+    }
+
+    .drawer-replies {
+      margin-top: 12px;
+      color: #666;
+      font-size: 15px;
+      font-weight: 650;
+    }
+
+    .drawer-inputbar {
+      min-height: calc(68px + env(safe-area-inset-bottom));
+      padding: 8px 16px env(safe-area-inset-bottom);
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 34px 34px;
+      gap: 10px;
+      align-items: center;
+      border-top: 1px solid #f0f0f0;
+      background: #fff;
+    }
+
+    .drawer-input {
+      height: 46px;
+      border-radius: 999px;
+      padding: 0 16px;
+      display: flex;
+      align-items: center;
+      background: #f6f6f6;
+      color: #a8a8a8;
+      font-size: 16px;
+    }
+
+    .drawer-mini-icon {
+      color: #8f8f8f;
+      font-size: 28px;
+      text-align: center;
+      line-height: 1;
+    }
+
+    @media (min-width: 700px) {
+      .app {
+        width: min(430px, 100vw);
+        margin: 0 auto;
+        border-left: 1px solid #eee;
+        border-right: 1px solid #eee;
+      }
+
+      .home-top,
+      .search-top,
+      .bottom-nav,
+      .modal,
+      .toast-mask {
+        left: 50%;
+        width: min(430px, 100vw);
+        right: auto;
+        transform: translateX(-50%);
+      }
+
+      .feed { columns: 2; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <section id="homeView" class="view active">
+      <header class="home-top">
+        <div class="primary-nav">
+          <button class="icon-btn" type="button" aria-label="对话"><span class="bubble-icon"></span></button>
+          <nav class="main-tabs" aria-label="主导航">
+            <button class="main-tab" type="button">关注</button>
+            <button class="main-tab active" type="button">发现</button>
+            <button class="main-tab" type="button">附近</button>
+          </nav>
+          <button id="searchToggle" class="icon-btn" type="button" aria-label="搜索"><span class="search-icon"></span></button>
+        </div>
+        <div class="topic-row" aria-label="内容频道">
+          <button class="topic active" type="button" data-filter="all">推荐</button>
+          <button class="topic" type="button" data-filter="video">视频</button>
+          <button class="topic" type="button" data-filter="xhs">小红书</button>
+          <button class="topic" type="button" data-filter="douyin">抖音</button>
+          <button class="topic" type="button" data-filter="image">图文</button>
+          <button class="topic" type="button" data-filter="all">收藏</button>
+          <button class="topic more" type="button" aria-label="更多">⌄</button>
+        </div>
+        <div id="searchBar" class="search-bar">
+          <input id="search" class="search-input" type="search" placeholder="搜索已采集内容">
+          <button id="searchClose" class="search-close" type="button">取消</button>
+        </div>
+      </header>
+      <main class="scroll-area">
+        <section id="grid" class="feed"></section>
+      </main>
+    </section>
+
+    <section id="searchView" class="view search-view idle">
+      <header class="search-top">
+        <div class="search-header">
+          <button id="searchBack" class="back-btn" type="button" aria-label="返回">‹</button>
+          <label class="search-pill">
+            <span class="mini-search" aria-hidden="true"></span>
+            <input id="searchPageInput" class="search-page-input" type="search" placeholder="proceate 画画过程">
+            <button id="searchClear" class="clear-search" type="button" aria-label="清空">×</button>
+          </label>
+          <button id="searchCancel" class="search-cancel" type="button">取消</button>
+        </div>
+        <nav class="search-scope" aria-label="搜索范围">
+          <button class="scope-tab active" type="button">全部</button>
+          <button class="scope-tab" type="button">作者</button>
+          <button class="scope-tab" type="button">商品</button>
+        </nav>
+        <div class="search-kind-row" aria-label="搜索排序">
+          <button class="search-filter active" type="button" data-search-mode="all">综合</button>
+          <button class="search-filter" type="button" data-search-mode="hot">最热</button>
+          <button class="search-filter" type="button" data-search-mode="new">最新</button>
+          <button class="search-filter" type="button" data-search-mode="video">视频 ▶</button>
+          <button class="search-filter" type="button" data-search-mode="image">图文 ▣</button>
+        </div>
+        <div class="search-tag-row" aria-label="搜索标签">
+          <button class="search-tag active" type="button" data-search-tag="all">全部</button>
+          <button class="search-tag" type="button" data-search-tag="xhs">小红书</button>
+          <button class="search-tag" type="button" data-search-tag="douyin">抖音</button>
+          <button class="search-tag" type="button" data-search-tag="video">视频</button>
+          <button class="search-tag" type="button" data-search-tag="image">图文</button>
+        </div>
+      </header>
+      <main class="scroll-area">
+        <section id="searchDiscovery" class="search-discovery">
+          <div class="suggest-head">
+            <h2>猜你喜欢</h2>
+            <button id="refreshSuggest" class="refresh-suggest" type="button"><span class="refresh-icon"></span>换一换</button>
+          </div>
+          <div id="suggestGrid" class="suggest-grid"></div>
+          <div class="discover-head">
+            <h2>搜索发现</h2>
+          </div>
+          <ol id="hotList" class="hot-list"></ol>
+        </section>
+        <section class="search-results-panel">
+          <section id="searchGrid" class="feed search-results"></section>
+        </section>
+      </main>
+    </section>
+
+    <section id="collectView" class="view collect-view">
+      <div class="collect-top">
+        <div class="collect-menu" aria-hidden="true"><span></span><span></span><span></span></div>
+        <div class="collect-channel"><span>直播</span><span>团购</span><strong>采集</strong><span>推荐</span></div>
+        <span class="collect-search" aria-hidden="true"></span>
+      </div>
+      <div class="collect-copy">复制分享口令后<br>粘贴到这里<br>我来帮你采集</div>
+      <form id="collector" class="collect-card">
+        <div class="collect-preview">
+          <h2 id="detectHeadline">还没粘贴链接吗</h2>
+        </div>
+        <div class="collect-body">
+          <p id="detectTitle" class="detect-title">粘贴小红书或抖音分享文本</p>
+          <textarea id="source" class="source-box" placeholder="例如：复制小红书/抖音分享口令，回到这里粘贴，会自动识别并开始采集。"></textarea>
+          <div class="collect-options">
+            <select id="platform" aria-label="平台">
+              <option value="auto">自动识别</option>
+              <option value="xhs">小红书</option>
+              <option value="douyin">抖音</option>
+            </select>
+            <label class="collect-toggle">
+              <input id="downloadMedia" type="checkbox" checked>
+              <span>下载媒体</span>
+            </label>
+          </div>
+          <button id="collectButton" class="collect-action" type="submit" disabled>打开看看</button>
+          <div id="status" class="collect-foot">这不是我复制的口令，我要重新粘贴 ›</div>
+        </div>
+      </form>
+    </section>
+
+    <nav class="bottom-nav" aria-label="底部导航">
+      <button class="nav-item active" type="button" data-view="home">首页</button>
+      <button class="nav-item" type="button" data-view="collect">采集</button>
+      <button id="addButton" class="add-btn" type="button" aria-label="添加">+</button>
+      <button class="nav-item" type="button" data-view="chat">对话</button>
+      <button class="nav-item" type="button" data-view="me">我</button>
+    </nav>
+  </div>
+
+  <div id="resultMask" class="toast-mask" aria-hidden="true">
+    <div class="result-card">
+      <div class="result-visual">采集完成</div>
+      <div class="result-content">
+        <p id="resultTitle" class="result-title">已加入你的瀑布流</p>
+        <button id="openResult" class="result-button" type="button">打开看看</button>
+        <div class="result-note">不是我复制的口令，我要重新粘贴 ›</div>
+      </div>
+    </div>
+  </div>
+
+  <div id="modal" class="modal" aria-hidden="true">
+    <div class="detail-panel">
+      <div id="viewer" class="detail-media"></div>
+      <div class="detail-content">
+        <div class="detail-head">
+          <div>
+            <h2 id="detailTitle" class="detail-title"></h2>
+            <div id="detailAuthor" class="detail-author"></div>
+          </div>
+          <button id="close" class="close" type="button" aria-label="关闭">×</button>
+        </div>
+        <div class="stats">
+          <div class="stat"><b id="liked">0</b><span>点赞</span></div>
+          <div class="stat"><b id="collected">0</b><span>收藏</span></div>
+          <div class="stat"><b id="comments">0</b><span>评论</span></div>
+          <div class="stat"><b id="shares">0</b><span>分享</span></div>
+        </div>
+        <div id="desc" class="desc"></div>
+        <div id="strip" class="strip"></div>
+        <div class="paths">
+          <a id="summaryLink" href="#">summary.json</a>
+          <a id="folderLink" href="#">采集文件夹</a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let items = window.COLLECTED_ITEMS || [];
+    const homeView = document.getElementById("homeView");
+    const searchView = document.getElementById("searchView");
+    const collectView = document.getElementById("collectView");
+    const grid = document.getElementById("grid");
+    const searchGrid = document.getElementById("searchGrid");
+    const search = document.getElementById("search");
+    const searchBar = document.getElementById("searchBar");
+    const searchToggle = document.getElementById("searchToggle");
+    const searchClose = document.getElementById("searchClose");
+    const searchBack = document.getElementById("searchBack");
+    const searchPageInput = document.getElementById("searchPageInput");
+    const searchClear = document.getElementById("searchClear");
+    const searchCancel = document.getElementById("searchCancel");
+    const suggestGrid = document.getElementById("suggestGrid");
+    const hotList = document.getElementById("hotList");
+    const refreshSuggest = document.getElementById("refreshSuggest");
+    const collector = document.getElementById("collector");
+    const source = document.getElementById("source");
+    const platform = document.getElementById("platform");
+    const downloadMedia = document.getElementById("downloadMedia");
+    const collectButton = document.getElementById("collectButton");
+    const status = document.getElementById("status");
+    const detectHeadline = document.getElementById("detectHeadline");
+    const detectTitle = document.getElementById("detectTitle");
+    const addButton = document.getElementById("addButton");
+    const resultMask = document.getElementById("resultMask");
+    const resultTitle = document.getElementById("resultTitle");
+    const openResult = document.getElementById("openResult");
+    let filter = "all";
+    let searchMode = "all";
+    let searchTag = "all";
+    let collecting = false;
+    let autoTimer = 0;
+    let suggestOffset = 0;
+    const fallbackSuggestions = [
+      "proceate 画画过程",
+      "FILAFUSION棒球服",
+      "漫画男生",
+      "动漫男生",
+      "纯洁的图片",
+      "斗罗大陆",
+      "活动主理人",
+      "3D打印模型素材",
+      "AI生成内容",
+      "毕业旅行"
+    ];
+    const hotDiscoveries = [
+      ["这一刻感觉自己嫁对人了", "452.8w", "-", "热"],
+      ["背着儿子偷发小红书", "339.1w", "↑", ""],
+      ["小问题 · 我们真的需要松弛感吗", "325.2w", "-", ""],
+      ["去图书馆要有久坐的仪式感", "316.3w", "↓", ""],
+      ["他的私房钱被一窝端", "314.8w", "-", ""],
+      ["我住了一年五星级酒店", "305.6w", "↓", ""],
+      ["我的天才女友结婚了", "232.4w", "-", ""],
+      ["手机秒表和我分散了 900 多天", "182.7w", "↑", ""],
+      ["九月的东北下雪了", "177.1w", "↓", "新"],
+      ["一棵树让你重新爱上杭州", "150.2w", "↓", ""]
+    ];
+
+    function fmt(value) {
+      if (value === null || value === undefined || value === "") return "0";
+      const number = Number(value);
+      if (!Number.isFinite(number)) return String(value);
+      if (number >= 10000) return (number / 10000).toFixed(number >= 100000 ? 0 : 1).replace(/\.0$/, "") + "万";
+      return String(number);
+    }
+
+    function detectPlatform(text) {
+      const value = text.toLowerCase();
+      if (/xiaohongshu|xhslink|xhs\.cn|小红书/.test(value)) return "xhs";
+      if (/douyin|iesdouyin|v\.douyin|抖音/.test(value)) return "douyin";
+      return "";
+    }
+
+    function platformName(value) {
+      if (value === "xhs") return "小红书";
+      if (value === "douyin") return "抖音";
+      return "分享口令";
+    }
+
+    function matches(item) {
+      const q = search.value.trim().toLowerCase();
+      const hay = `${item.title} ${item.author} ${item.description}`.toLowerCase();
+      if (q && !hay.includes(q)) return false;
+      if (filter === "all") return true;
+      if (filter === "video") return Boolean(item.video);
+      if (filter === "image") return !item.video;
+      return item.platform === filter;
+    }
+
+    function searchMatches(item) {
+      const q = searchPageInput.value.trim().toLowerCase();
+      const hay = `${item.title} ${item.author} ${item.description}`.toLowerCase();
+      if (q && !hay.includes(q)) return false;
+      if (searchMode === "video" && !item.video) return false;
+      if (searchMode === "image" && item.video) return false;
+      if (searchTag === "xhs" || searchTag === "douyin") return item.platform === searchTag;
+      if (searchTag === "video") return Boolean(item.video);
+      if (searchTag === "image") return !item.video;
+      return true;
+    }
+
+    function escapeHtml(value) {
+      return String(value || "").replace(/[&<>"']/g, ch => ({
+        "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;"
+      })[ch]);
+    }
+
+    function safeDecodePathPart(value) {
+      try {
+        return decodeURIComponent(value);
+      } catch (error) {
+        return value;
+      }
+    }
+
+    function encodeMediaUrl(value) {
+      if (!value) return "";
+      const raw = String(value);
+      const [pathWithQuery, hash = ""] = raw.split("#", 2);
+      const [path, query = ""] = pathWithQuery.split("?", 2);
+      const encodedPath = path
+        .split("/")
+        .map(part => encodeURIComponent(safeDecodePathPart(part)))
+        .join("/");
+      const encodedQuery = query ? `?${query}` : "";
+      const encodedHash = hash ? `%23${encodeURIComponent(safeDecodePathPart(hash))}` : "";
+      return `${encodedPath}${encodedQuery}${encodedHash}`;
+    }
+
+    function setActiveView(view) {
+      const active = view === "collect" ? "collect" : view === "search" ? "search" : "home";
+      homeView.classList.toggle("active", active === "home");
+      searchView.classList.toggle("active", active === "search");
+      collectView.classList.toggle("active", active === "collect");
+      document.querySelectorAll(".nav-item[data-view]").forEach(button => {
+        button.classList.toggle("active", button.dataset.view === active || (active === "search" && button.dataset.view === "home"));
+      });
+      if (active === "search") {
+        setTimeout(() => searchPageInput.focus(), 80);
+        renderSearch();
+      }
+    }
+
+    function sortedSearchItems(list) {
+      const copy = [...list];
+      if (searchMode === "hot") {
+        copy.sort((a, b) => Number(b.liked || 0) - Number(a.liked || 0));
+      } else if (searchMode === "new") {
+        copy.reverse();
+      }
+      return copy;
+    }
+
+    function searchSuggestionTerms() {
+      const fromItems = items
+        .flatMap(item => [
+          item.title,
+          item.author,
+          item.platform === "douyin" ? "抖音热门视频" : "小红书图文"
+        ])
+        .filter(Boolean)
+        .map(value => String(value).replace(/\s+/g, " ").trim())
+        .filter(value => value.length >= 2)
+        .map(value => value.length > 18 ? `${value.slice(0, 18)}…` : value);
+      return [...new Set([...fallbackSuggestions, ...fromItems])];
+    }
+
+    function renderSearchDiscovery() {
+      const terms = searchSuggestionTerms();
+      const visible = Array.from({ length: 6 }, (_, index) => terms[(suggestOffset + index) % terms.length]);
+      suggestGrid.innerHTML = visible.map(term => `
+        <button class="suggest-item" type="button">${escapeHtml(term)}</button>
+      `).join("");
+      suggestGrid.querySelectorAll(".suggest-item").forEach(button => {
+        button.addEventListener("click", () => {
+          searchPageInput.value = button.textContent.trim();
+          search.value = searchPageInput.value;
+          renderSearch();
+          searchPageInput.focus();
+        });
+      });
+      hotList.innerHTML = hotDiscoveries.map(([title, score, trend, badge]) => `
+        <li class="hot-item">
+          <span class="hot-dot"></span>
+          <span class="hot-title">${escapeHtml(title)}${badge ? `<span class="hot-badge">${escapeHtml(badge)}</span>` : ""}</span>
+          <span class="hot-score">${escapeHtml(score)}</span>
+          <span class="hot-trend ${trend === "↑" ? "up" : trend === "↓" ? "down" : ""}">${escapeHtml(trend)}</span>
+        </li>
+      `).join("");
+    }
+
+    function updateSearchState() {
+      searchView.classList.toggle("idle", !searchPageInput.value.trim());
+    }
+
+    function renderCards(target, list, emptyText) {
+      target.innerHTML = "";
+      list.forEach(item => {
+        const card = document.createElement("article");
+        card.className = "card";
+        card.innerHTML = `
+          <div class="thumb">
+            ${item.cover ? `<img src="${encodeMediaUrl(item.cover)}" alt="">` : `<div style="height:210px"></div>`}
+            ${item.video ? `<span class="play" aria-label="视频"></span>` : ""}
+          </div>
+          <div class="card-body">
+            <h3 class="title">${escapeHtml(item.title)}</h3>
+            <div class="meta">
+              <div class="author"><i class="avatar"></i><span>${escapeHtml(item.author)}</span></div>
+              <div class="like"><span class="heart">♡</span>${fmt(item.liked)}</div>
+            </div>
+          </div>
+        `;
+        card.addEventListener("click", () => openModal(item));
+        target.appendChild(card);
+      });
+      if (!target.children.length) {
+        target.innerHTML = `<div class="empty">${escapeHtml(emptyText)}</div>`;
+      }
+    }
+
+    function render() {
+      renderCards(grid, items.filter(matches), "暂无匹配内容");
+    }
+
+    function renderSearch() {
+      updateSearchState();
+      if (!searchPageInput.value.trim()) {
+        renderSearchDiscovery();
+        searchGrid.innerHTML = "";
+        return;
+      }
+      const list = sortedSearchItems(items.filter(searchMatches));
+      renderCards(searchGrid, list, searchPageInput.value.trim() ? "没有找到相关采集内容" : "输入关键词搜索已采集内容");
+    }
+
+    function sampleComments(item) {
+      const count = Number(item.comments || 0);
+      return [
+        {
+          name: "momo妖",
+          text: "其实不是很能欣赏，如果视觉传达需要有个人在旁边讲一大堆，否则观众无法理解，是好的传达吗？",
+          meta: "3小时前 上海",
+          extra: "展开 3 条回复"
+        },
+        {
+          name: "Civilbazation",
+          text: "感谢分享！！！",
+          meta: "2小时前"
+        },
+        {
+          name: "爱看内容的人",
+          text: count > 0 ? "这个作品信息挺完整，先收藏慢慢看。" : "这个内容挺有意思。",
+          meta: "刚刚"
+        }
+      ];
+    }
+
+    function renderVideoDrawer(item) {
+      const commentsCount = fmt(item.comments);
+      const description = item.description || item.title || item.name || "";
+      const commentsHtml = sampleComments(item).map(comment => `
+        <article class="drawer-item">
+          <div class="drawer-avatar"></div>
+          <div>
+            <div class="drawer-name"><span>${escapeHtml(comment.name)}</span></div>
+            <div class="drawer-text">${escapeHtml(comment.text)}</div>
+            <div class="drawer-meta">
+              <span>${escapeHtml(comment.meta)}</span>
+              <span class="comment-side"><span>♡</span><span>☻</span></span>
+            </div>
+            ${comment.extra ? `<div class="drawer-replies">${escapeHtml(comment.extra)}</div>` : ""}
+          </div>
+        </article>
+      `).join("");
+
+      return `
+        <div class="drawer-head">
+          <div class="drawer-title">共 ${commentsCount} 条评论 <span class="drawer-sort">☰</span></div>
+          <button id="drawerClose" class="drawer-close" type="button" aria-label="关闭">×</button>
+        </div>
+        <div class="drawer-body">
+          <article class="drawer-item">
+            <div class="drawer-avatar"></div>
+            <div>
+              <div class="drawer-name">
+                <span>${escapeHtml(item.author || "作者")}</span>
+                <span class="author-badge">作者</span>
+              </div>
+              <div class="drawer-text">${escapeHtml(description)}</div>
+              <div class="drawer-meta">
+                <span>今天 09:48 ${item.platform === "douyin" ? "抖音" : "小红书"}</span>
+                <span class="dislike-pill">☹ 不喜欢</span>
+              </div>
+            </div>
+          </article>
+          ${commentsHtml}
+        </div>
+        <div class="drawer-inputbar">
+          <div class="drawer-input">有话要说，快来评论</div>
+          <div class="drawer-mini-icon">🎙</div>
+          <div class="drawer-mini-icon">▧</div>
+        </div>
+      `;
+    }
+
+    function imageSources(item) {
+      const sources = Array.isArray(item.images) ? item.images.filter(Boolean) : [];
+      if (item.cover && !sources.includes(item.cover)) {
+        sources.unshift(item.cover);
+      }
+      return sources;
+    }
+
+    function renderImageDetail(item, sources) {
+      const firstImage = sources[0] || item.cover || "";
+      const countLabel = sources.length > 1 ? `1/${sources.length}` : "";
+      const title = item.title || item.name || "";
+      const description = item.description && item.description !== title ? item.description : "";
+      return `
+        <div class="image-page">
+          <header class="image-topbar">
+            <button id="imageBack" class="image-back" type="button" aria-label="返回">‹</button>
+            <div class="image-author-avatar"></div>
+            <div class="image-author-name">${escapeHtml(item.author || "作者")}</div>
+            <button class="image-follow" type="button">关注</button>
+            <button class="image-share" type="button" aria-label="分享">↗</button>
+          </header>
+          <main class="image-scroll">
+            <section id="imageHero" class="image-hero">
+              ${firstImage ? `<img id="imageHeroImg" src="${encodeMediaUrl(firstImage)}" alt="">` : ""}
+              <div id="imageCount" class="image-count">${countLabel}</div>
+            </section>
+            <div id="imageDots" class="image-dots">
+              ${sources.map((_, index) => `<button class="image-dot${index === 0 ? " active" : ""}" type="button" data-index="${index}" aria-label="第 ${index + 1} 张"></button>`).join("")}
+            </div>
+            <section class="image-copy">
+              <h2 class="image-title">${escapeHtml(title)}</h2>
+              ${description ? `<div class="image-desc">${escapeHtml(description)}</div>` : ""}
+            </section>
+          </main>
+          <footer class="image-actions">
+            <button class="image-comment" type="button"><span class="image-pencil"></span><span>说点什么...</span></button>
+            <button class="image-action" type="button"><span class="image-action-icon">♡</span><span>${fmt(item.liked)}</span></button>
+            <button class="image-action" type="button"><span class="image-action-icon">☆</span><span>${fmt(item.collected)}</span></button>
+            <button class="image-action" type="button"><span class="image-action-icon">☻</span><span>${fmt(item.comments)}</span></button>
+          </footer>
+        </div>
+      `;
+    }
+
+    function bindImageDetail(sources) {
+      let activeIndex = 0;
+      const hero = document.getElementById("imageHero");
+      const image = document.getElementById("imageHeroImg");
+      const count = document.getElementById("imageCount");
+      const dots = [...document.querySelectorAll(".image-dot")];
+      const setImage = (index) => {
+        if (!sources.length) return;
+        activeIndex = (index + sources.length) % sources.length;
+        if (image) image.src = encodeMediaUrl(sources[activeIndex]);
+        if (count) count.textContent = sources.length > 1 ? `${activeIndex + 1}/${sources.length}` : "";
+        dots.forEach((dot, dotIndex) => dot.classList.toggle("active", dotIndex === activeIndex));
+      };
+      document.getElementById("imageBack").addEventListener("click", closeModal);
+      hero.addEventListener("click", () => setImage(activeIndex + 1));
+      dots.forEach(dot => {
+        dot.addEventListener("click", () => setImage(Number(dot.dataset.index || 0)));
+      });
+    }
+
+    function openModal(item) {
+      const modal = document.getElementById("modal");
+      const viewer = document.getElementById("viewer");
+      const detailContent = document.querySelector(".detail-content");
+      modal.classList.toggle("video-detail", Boolean(item.video));
+      modal.classList.toggle("image-detail", !item.video);
+      const show = (src) => {
+        if (!src) {
+          viewer.innerHTML = "";
+          return;
+        }
+        const encodedSrc = encodeMediaUrl(src);
+        viewer.innerHTML = item.video && src === item.video
+          ? `<video src="${encodedSrc}" controls autoplay playsinline></video>`
+          : `<img src="${encodedSrc}" alt="">`;
+        const activeStrip = document.getElementById("strip");
+        if (activeStrip) {
+          [...activeStrip.children].forEach(el => el.classList.toggle("active", el.dataset.src === src));
+        }
+      };
+      if (item.video) {
+        detailContent.innerHTML = renderVideoDrawer(item);
+        show(item.video);
+        document.getElementById("drawerClose").addEventListener("click", closeModal);
+      } else {
+        const sources = imageSources(item);
+        viewer.innerHTML = "";
+        detailContent.innerHTML = renderImageDetail(item, sources);
+        bindImageDetail(sources);
+      }
+      modal.classList.add("open");
+      modal.setAttribute("aria-hidden", "false");
+      document.body.style.overflow = "hidden";
+    }
+
+    function closeModal() {
+      const modal = document.getElementById("modal");
+      modal.classList.remove("open", "video-detail", "image-detail");
+      document.getElementById("viewer").innerHTML = "";
+      document.body.style.overflow = "";
+    }
+
+    function setCollectStatus(message, kind = "") {
+      status.textContent = message;
+      status.className = `collect-foot ${kind}`.trim();
+    }
+
+    function updateDetectState() {
+      const text = source.value.trim();
+      const detected = detectPlatform(text);
+      if (detected && platform.value === "auto") {
+        detectHeadline.textContent = `识别到${platformName(detected)}`;
+        detectTitle.textContent = `准备采集 ${platformName(detected)} 的作品`;
+      } else if (text) {
+        detectHeadline.textContent = "已复制到口令";
+        detectTitle.textContent = "正在分析分享文本";
+      } else {
+        detectHeadline.textContent = "还没粘贴链接吗";
+        detectTitle.textContent = "粘贴小红书或抖音分享文本";
+      }
+      collectButton.disabled = !text || collecting;
+      collectButton.textContent = collecting ? "采集中…" : "打开看看";
+      clearTimeout(autoTimer);
+      if (text && !collecting) {
+        autoTimer = setTimeout(() => submitCollect(), 700);
+      }
+    }
+
+    async function refreshItems() {
+      try {
+        const response = await fetch("/api/items", { cache: "no-store" });
+        if (!response.ok) return;
+        const data = await response.json();
+        if (data.ok && Array.isArray(data.items)) {
+          items = data.items;
+          render();
+          renderSearch();
+          renderSearchDiscovery();
+        }
+      } catch (error) {
+        // Static data.js keeps the page usable when the API is unavailable.
+      }
+    }
+
+    async function submitCollect() {
+      const text = source.value.trim();
+      if (!text || collecting) {
+        if (!text) setCollectStatus("请先粘贴链接或分享文本。", "error");
+        return;
+      }
+      collecting = true;
+      collectButton.disabled = true;
+      collectButton.textContent = "采集中…";
+      const detected = detectPlatform(text);
+      setCollectStatus(detected ? `已识别${platformName(detected)}，正在采集…` : "正在识别并采集，视频下载可能需要几十秒…");
+      try {
+        const response = await fetch("/api/collect", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            source: text,
+            platform: platform.value,
+            downloadMedia: downloadMedia.checked,
+          }),
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok || !data.ok) {
+          throw new Error(data.error || `请求失败：${response.status}`);
+        }
+        items = Array.isArray(data.items) ? data.items : items;
+        source.value = "";
+        render();
+        renderSearch();
+        setCollectStatus(`采集完成，当前共 ${items.length} 条内容。`, "ok");
+        resultTitle.textContent = "已加入你的瀑布流";
+        resultMask.classList.add("open");
+        resultMask.setAttribute("aria-hidden", "false");
+      } catch (error) {
+        setCollectStatus(error.message || "采集失败。", "error");
+      } finally {
+        collecting = false;
+        updateDetectState();
+      }
+    }
+
+    document.getElementById("modal").addEventListener("click", event => {
+      if (event.target.id === "modal") closeModal();
+    });
+
+    document.querySelectorAll(".nav-item[data-view]").forEach(button => {
+      button.addEventListener("click", () => {
+        if (button.dataset.view === "collect") {
+          setActiveView("collect");
+        } else if (button.dataset.view === "home") {
+          setActiveView("home");
+        }
+      });
+    });
+    addButton.addEventListener("click", () => setActiveView("collect"));
+
+    openResult.addEventListener("click", () => {
+      resultMask.classList.remove("open");
+      resultMask.setAttribute("aria-hidden", "true");
+      setActiveView("home");
+      refreshItems();
+    });
+    resultMask.addEventListener("click", event => {
+      if (event.target.id === "resultMask") {
+        resultMask.classList.remove("open");
+        resultMask.setAttribute("aria-hidden", "true");
+      }
+    });
+
+    searchToggle.addEventListener("click", () => {
+      searchPageInput.value = search.value;
+      updateSearchState();
+      setActiveView("search");
+    });
+    searchBack.addEventListener("click", () => setActiveView("home"));
+    searchCancel.addEventListener("click", () => setActiveView("home"));
+    searchClear.addEventListener("click", () => {
+      searchPageInput.value = "";
+      search.value = "";
+      renderSearch();
+      searchPageInput.focus();
+    });
+    searchClose.addEventListener("click", () => {
+      search.value = "";
+      searchBar.classList.remove("open");
+      render();
+    });
+    search.addEventListener("input", render);
+    searchPageInput.addEventListener("input", () => {
+      search.value = searchPageInput.value;
+      renderSearch();
+    });
+    refreshSuggest.addEventListener("click", () => {
+      suggestOffset = (suggestOffset + 6) % searchSuggestionTerms().length;
+      renderSearchDiscovery();
+    });
+
+    document.querySelectorAll(".search-filter").forEach(button => {
+      button.addEventListener("click", () => {
+        document.querySelectorAll(".search-filter").forEach(item => item.classList.remove("active"));
+        button.classList.add("active");
+        searchMode = button.dataset.searchMode || "all";
+        renderSearch();
+      });
+    });
+
+    document.querySelectorAll(".search-tag").forEach(button => {
+      button.addEventListener("click", () => {
+        document.querySelectorAll(".search-tag").forEach(item => item.classList.remove("active"));
+        button.classList.add("active");
+        searchTag = button.dataset.searchTag || "all";
+        renderSearch();
+      });
+    });
+
+    document.querySelectorAll(".topic[data-filter]").forEach(tab => {
+      tab.addEventListener("click", () => {
+        document.querySelectorAll(".topic").forEach(item => item.classList.remove("active"));
+        tab.classList.add("active");
+        filter = tab.dataset.filter;
+        render();
+      });
+    });
+
+    source.addEventListener("input", updateDetectState);
+    source.addEventListener("paste", () => setTimeout(updateDetectState, 40));
+    platform.addEventListener("change", updateDetectState);
+    collector.addEventListener("submit", event => {
+      event.preventDefault();
+      submitCollect();
+    });
+
+    refreshItems();
+    render();
+    renderSearchDiscovery();
+    updateDetectState();
+  </script>
+</body>
+</html>
