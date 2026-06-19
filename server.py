@@ -31,6 +31,7 @@ SAFE_VIEWER_SUFFIXES = {".html", ".js", ".css", ".png", ".jpg", ".jpeg", ".webp"
 SAFE_MEDIA_SUFFIXES = {".jpg", ".jpeg", ".png", ".webp", ".gif", ".mp4", ".m4a"}
 APP_APK_PATH = "/downloads/social-media-claw-debug.apk"
 APP_APK_URL = os.environ.get("LINK_APP_DOWNLOAD_URL")
+TIKHUB_ENV_FILE = os.environ.get("LINK_TIKHUB_ENV_FILE")
 
 
 def auth_config() -> tuple[str, str] | None:
@@ -122,6 +123,28 @@ def detect_platform(source: str, requested: str) -> str:
     raise ValueError("无法判断链接平台，请选择小红书或抖音后再采集。")
 
 
+def collect_error_message(message: str) -> str:
+    if "Missing API key" in message or "TIKHUB_API_KEY" in message:
+        return "采集服务还没配置 TIKHUB_API_KEY。请在服务器环境变量或采集脚本 .env 里设置 TikHub API Key 后重试。"
+    return message
+
+
+def tikhub_env_file() -> Path | None:
+    candidates = []
+    if TIKHUB_ENV_FILE:
+        candidates.append(Path(TIKHUB_ENV_FILE).expanduser())
+    candidates.extend(
+        [
+            ROOT / ".env",
+            ROOT / "xhs-tikhub-collector" / ".env",
+        ]
+    )
+    for candidate in candidates:
+        if candidate.is_file():
+            return candidate.resolve()
+    return None
+
+
 def collect_source(source: str, platform: str, download_media: bool) -> dict[str, Any]:
     script = COLLECTORS[platform]
     args = [
@@ -135,13 +158,16 @@ def collect_source(source: str, platform: str, download_media: bool) -> dict[str
         "--retries",
         "1",
     ]
+    env_file = tikhub_env_file()
+    if env_file:
+        args.extend(["--env-file", str(env_file)])
     if download_media:
         args.append("--download-media")
 
     result = run_command(args, cwd=script.parent, timeout=300)
     if result.returncode != 0:
         message = (result.stderr or result.stdout or "采集失败").strip()
-        raise RuntimeError(message[-1600:])
+        raise RuntimeError(collect_error_message(message[-1600:]))
 
     try:
         collector_payload = json.loads(result.stdout)

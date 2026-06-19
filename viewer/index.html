@@ -2564,6 +2564,7 @@
       collecting = true;
       collectButton.disabled = true;
       const detected = detectPlatform(text);
+      source.blur();
       source.value = "";
       updateDetectState();
       setCollectStatus("已放到后台采集，你可以继续浏览首页。", "ok");
