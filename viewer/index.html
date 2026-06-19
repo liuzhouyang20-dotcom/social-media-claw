@@ -1003,6 +1003,148 @@
     .collect-foot.error { color: #c72239; }
     .collect-foot.ok { color: #16794c; }
 
+    .collect-tasks {
+      position: relative;
+      z-index: 1;
+      width: min(100%, 440px);
+      margin: 16px auto 0;
+    }
+
+    .collect-tasks-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 10px;
+    }
+
+    .collect-tasks-title {
+      margin: 0;
+      color: #222826;
+      font-size: 16px;
+      line-height: 1.35;
+      font-weight: 850;
+    }
+
+    .collect-tasks-count {
+      color: #8a928f;
+      font-size: 12px;
+      line-height: 1;
+      font-weight: 680;
+    }
+
+    .collect-task-list {
+      display: grid;
+      gap: 10px;
+    }
+
+    .collect-task {
+      width: 100%;
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 12px;
+      border: 1px solid rgba(24,31,29,.08);
+      border-radius: 8px;
+      padding: 12px;
+      background: rgba(255,255,255,.9);
+      color: #252a28;
+      text-align: left;
+      box-shadow: 0 8px 26px rgba(24,31,29,.08);
+    }
+
+    .collect-task-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 999px;
+      background: #a5aca9;
+    }
+
+    .collect-task.running .collect-task-dot {
+      background: var(--red);
+      box-shadow: 0 0 0 5px rgba(255,36,66,.12);
+      animation: collectPulse 1.1s ease-in-out infinite;
+    }
+
+    .collect-task.ok .collect-task-dot { background: #18a067; }
+    .collect-task.error .collect-task-dot { background: #c72239; }
+
+    .collect-task-main {
+      min-width: 0;
+    }
+
+    .collect-task-title {
+      overflow: hidden;
+      color: #202423;
+      font-size: 14px;
+      line-height: 1.35;
+      font-weight: 780;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .collect-task-meta {
+      overflow: hidden;
+      margin-top: 4px;
+      color: #818986;
+      font-size: 12px;
+      line-height: 1.35;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .collect-task-status {
+      min-width: 54px;
+      height: 28px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 999px;
+      background: #f2f4f3;
+      color: #69716e;
+      font-size: 12px;
+      font-weight: 760;
+      white-space: nowrap;
+    }
+
+    .collect-task.running .collect-task-status {
+      background: rgba(255,36,66,.1);
+      color: var(--red);
+    }
+
+    .collect-task.ok .collect-task-status {
+      background: rgba(24,160,103,.1);
+      color: #168455;
+    }
+
+    .collect-task.error .collect-task-status {
+      background: rgba(199,34,57,.1);
+      color: #c72239;
+    }
+
+    .collect-task-detail {
+      margin-top: 10px;
+      border: 1px solid rgba(24,31,29,.08);
+      border-radius: 8px;
+      padding: 12px;
+      background: rgba(255,255,255,.82);
+      color: #68716e;
+      font-size: 13px;
+      line-height: 1.55;
+    }
+
+    .collect-task-detail strong {
+      display: block;
+      margin-bottom: 4px;
+      color: #202423;
+      font-size: 14px;
+    }
+
+    @keyframes collectPulse {
+      0%, 100% { transform: scale(1); opacity: 1; }
+      50% { transform: scale(.72); opacity: .72; }
+    }
+
     .toast-mask {
       position: fixed;
       inset: 0;
@@ -1941,6 +2083,14 @@
           <div id="status" class="collect-foot">粘贴分享口令后，可选择平台和是否下载媒体。</div>
         </div>
       </form>
+      <section class="collect-tasks" aria-label="采集记录">
+        <div class="collect-tasks-head">
+          <h2 class="collect-tasks-title">采集记录</h2>
+          <span id="collectTaskCount" class="collect-tasks-count">0 条</span>
+        </div>
+        <div id="collectTaskList" class="collect-task-list"></div>
+        <div id="collectTaskDetail" class="collect-task-detail" hidden></div>
+      </section>
     </section>
 
     <nav class="bottom-nav" aria-label="底部导航">
@@ -2017,6 +2167,9 @@
     const downloadMedia = document.getElementById("downloadMedia");
     const collectButton = document.getElementById("collectButton");
     const status = document.getElementById("status");
+    const collectTaskList = document.getElementById("collectTaskList");
+    const collectTaskCount = document.getElementById("collectTaskCount");
+    const collectTaskDetail = document.getElementById("collectTaskDetail");
     const appToast = document.getElementById("appToast");
     const detectHeadline = document.getElementById("detectHeadline");
     const detectTitle = document.getElementById("detectTitle");
@@ -2028,8 +2181,7 @@
     let searchMode = "all";
     let searchTag = "all";
     let collecting = false;
-    let autoCollectTimer = 0;
-    let lastAutoCollectSource = "";
+    let activeCollectTaskId = "";
     let toastTimer = 0;
     let pullStartY = 0;
     let pullDistance = 0;
@@ -2059,6 +2211,35 @@
       ["手机秒表和我分散了 900 多天", "182.7w", "↑", ""],
       ["九月的东北下雪了", "177.1w", "↓", "新"],
       ["一棵树让你重新爱上杭州", "150.2w", "↓", ""]
+    ];
+    const collectTasks = [
+      {
+        id: "mock-1",
+        title: "小红书图文作品",
+        platform: "小红书",
+        status: "ok",
+        statusText: "已完成",
+        time: "今天 14:20",
+        detail: "模拟记录：已保存封面、正文和图片素材，可在首页刷新后查看。"
+      },
+      {
+        id: "mock-2",
+        title: "抖音视频分享口令",
+        platform: "抖音",
+        status: "running",
+        statusText: "采集中",
+        time: "今天 13:48",
+        detail: "模拟记录：正在解析视频信息并下载媒体，完成后会自动更新状态。"
+      },
+      {
+        id: "mock-3",
+        title: "小红书链接解析",
+        platform: "小红书",
+        status: "error",
+        statusText: "失败",
+        time: "昨天 22:16",
+        detail: "模拟记录：链接已过期或接口返回异常，可以重新复制分享口令后再试。"
+      }
     ];
 
     function fmt(value) {
@@ -2431,10 +2612,38 @@
       }, 2600);
     }
 
+    function taskSourceTitle(text, detected) {
+      const compact = text.replace(/\s+/g, " ").trim();
+      if (compact) return compact.slice(0, 28);
+      return `${platformName(detected)}采集任务`;
+    }
+
+    function renderCollectTasks(activeTask = null) {
+      collectTaskCount.textContent = `${collectTasks.length} 条`;
+      collectTaskList.innerHTML = collectTasks.map(task => `
+        <button class="collect-task ${task.status}" type="button" data-task-id="${escapeHtml(task.id)}">
+          <span class="collect-task-dot"></span>
+          <span class="collect-task-main">
+            <span class="collect-task-title">${escapeHtml(task.title)}</span>
+            <span class="collect-task-meta">${escapeHtml(task.platform)} · ${escapeHtml(task.time)}</span>
+          </span>
+          <span class="collect-task-status">${escapeHtml(task.statusText)}</span>
+        </button>
+      `).join("");
+      if (activeTask) showCollectTaskDetail(activeTask);
+    }
+
+    function showCollectTaskDetail(task) {
+      collectTaskDetail.hidden = false;
+      collectTaskDetail.innerHTML = `
+        <strong>${escapeHtml(task.title)}</strong>
+        <span>${escapeHtml(task.detail || "暂无更多详情。")}</span>
+      `;
+    }
+
     function updateDetectState() {
       const text = source.value.trim();
       const detected = detectPlatform(text);
-      clearTimeout(autoCollectTimer);
       if (detected && platform.value === "auto") {
         detectHeadline.textContent = `识别到${platformName(detected)}`;
         detectTitle.textContent = `确认后采集 ${platformName(detected)} 的作品`;
@@ -2453,14 +2662,6 @@
         } else {
           setCollectStatus("粘贴分享口令后，可选择平台和是否下载媒体。");
         }
-      }
-      if (text && !collecting && text !== lastAutoCollectSource) {
-        autoCollectTimer = setTimeout(() => {
-          if (source.value.trim() === text && !collecting) {
-            lastAutoCollectSource = text;
-            submitCollect();
-          }
-        }, 900);
       }
     }
 
@@ -2560,16 +2761,26 @@
       const submittedText = text;
       const submittedPlatform = platform.value;
       const submittedDownloadMedia = downloadMedia.checked;
-      lastAutoCollectSource = submittedText;
       collecting = true;
       collectButton.disabled = true;
       const detected = detectPlatform(text);
+      const task = {
+        id: `task-${Date.now()}`,
+        title: taskSourceTitle(submittedText, detected),
+        platform: platformName(detected || submittedPlatform),
+        status: "running",
+        statusText: "采集中",
+        time: "刚刚",
+        detail: "正在后台采集。你可以留在本页查看状态，也可以切到首页继续浏览。"
+      };
+      activeCollectTaskId = task.id;
+      collectTasks.unshift(task);
+      renderCollectTasks(task);
       source.blur();
       source.value = "";
       updateDetectState();
-      setCollectStatus("已放到后台采集，你可以继续浏览首页。", "ok");
+      setCollectStatus("已开始后台采集，进度会显示在下方列表。", "ok");
       showToast(detected ? `${platformName(detected)} 已开始后台采集` : "已开始后台采集");
-      setActiveView("home");
       try {
         const response = await fetch("/api/collect", {
           method: "POST",
@@ -2588,14 +2799,24 @@
         render();
         renderSearch();
         renderSearchDiscovery();
+        task.status = "ok";
+        task.statusText = "已完成";
+        task.time = "刚刚完成";
+        task.detail = `采集完成，当前首页共 ${items.length} 条内容。点击首页下拉刷新也可以重新同步。`;
+        renderCollectTasks(task);
         setCollectStatus(`后台采集完成，当前共 ${items.length} 条内容。`, "ok");
         showToast(`采集成功，已加入首页`, "ok");
       } catch (error) {
-        lastAutoCollectSource = "";
+        task.status = "error";
+        task.statusText = "失败";
+        task.time = "刚刚失败";
+        task.detail = error.message || "后台采集失败。";
+        renderCollectTasks(task);
         setCollectStatus(error.message || "后台采集失败。", "error");
         showToast(error.message || "采集失败", "error");
       } finally {
         collecting = false;
+        activeCollectTaskId = "";
         updateDetectState();
       }
     }
@@ -2686,6 +2907,12 @@
     source.addEventListener("input", updateDetectState);
     source.addEventListener("paste", () => setTimeout(updateDetectState, 40));
     platform.addEventListener("change", updateDetectState);
+    collectTaskList.addEventListener("click", event => {
+      const button = event.target.closest(".collect-task");
+      if (!button) return;
+      const task = collectTasks.find(item => item.id === button.dataset.taskId);
+      if (task) showCollectTaskDetail(task);
+    });
     collector.addEventListener("submit", event => {
       event.preventDefault();
       submitCollect();
@@ -2694,6 +2921,7 @@
     refreshItems();
     render();
     renderSearchDiscovery();
+    renderCollectTasks(collectTasks[1]);
     updateDetectState();
   </script>
 </body>
