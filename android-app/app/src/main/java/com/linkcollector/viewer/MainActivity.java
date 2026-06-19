@@ -22,6 +22,7 @@ import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.Button;
+import android.widget.CheckBox;
 import android.widget.EditText;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
@@ -34,6 +35,7 @@ import android.text.Editable;
 import android.text.TextWatcher;
 import android.graphics.Typeface;
 import android.graphics.drawable.ColorDrawable;
+import android.graphics.drawable.GradientDrawable;
 
 import org.json.JSONObject;
 
@@ -44,13 +46,14 @@ import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
+import java.util.Locale;
 
 public class MainActivity extends Activity {
     private static final String PREFS_NAME = "link_collector_auth";
     private static final String KEY_BASE_URL = "base_url";
     private static final String KEY_USERNAME = "username";
     private static final String KEY_PASSWORD = "password";
-    private static final String DEFAULT_BASE_URL = "https://your-server.example.com";
+    private static final String DEFAULT_BASE_URL = "http://49.51.72.63";
     private static final String DEFAULT_USERNAME = "your-username";
     private int currentVersionCode() {
         try {
@@ -63,9 +66,15 @@ public class MainActivity extends Activity {
     private WebView webView;
     private ProgressBar progressBar;
     private View loginView;
+    private LinearLayout bottomNav;
+    private TextView homeTab;
+    private TextView collectTab;
+    private TextView chatTab;
+    private TextView meTab;
     private EditText serverInput;
     private EditText usernameInput;
     private EditText passwordInput;
+    private CheckBox agreementCheckBox;
     private TextView loginStatus;
     private Button loginButton;
     private SharedPreferences preferences;
@@ -127,12 +136,136 @@ public class MainActivity extends Activity {
                 Gravity.TOP
         );
         root.addView(progressBar, progressParams);
+        bottomNav = createBottomNav();
+        FrameLayout.LayoutParams bottomParams = new FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                dp(86),
+                Gravity.BOTTOM
+        );
+        root.addView(bottomNav, bottomParams);
         loginView = createLoginView();
         root.addView(loginView, new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT,
                 FrameLayout.LayoutParams.MATCH_PARENT
         ));
         setContentView(root);
+    }
+
+    private LinearLayout createBottomNav() {
+        LinearLayout nav = new LinearLayout(this);
+        nav.setOrientation(LinearLayout.HORIZONTAL);
+        nav.setGravity(Gravity.CENTER);
+        nav.setPadding(dp(20), dp(10), dp(20), dp(22));
+        nav.setBackgroundColor(0xFFFFFFFF);
+        nav.setVisibility(View.GONE);
+
+        homeTab = createNavText("首页");
+        collectTab = createNavText("采集");
+        chatTab = createNavText("对话");
+        meTab = createNavText("我");
+
+        View add = createAddButton();
+        nav.addView(homeTab, navWeight());
+        nav.addView(collectTab, navWeight());
+        nav.addView(add, new LinearLayout.LayoutParams(dp(74), LinearLayout.LayoutParams.MATCH_PARENT));
+        nav.addView(chatTab, navWeight());
+        nav.addView(meTab, navWeight());
+
+        homeTab.setOnClickListener(view -> switchWebView("home"));
+        collectTab.setOnClickListener(view -> switchWebView("collect"));
+        add.setOnClickListener(view -> switchWebView("collect"));
+        chatTab.setOnClickListener(view -> Toast.makeText(this, "对话功能稍后开放", Toast.LENGTH_SHORT).show());
+        meTab.setOnClickListener(view -> showAccountMenu());
+        selectNativeTab("home");
+        return nav;
+    }
+
+    private void showAccountMenu() {
+        new AlertDialog.Builder(this)
+                .setTitle("账号")
+                .setItems(new String[]{"切换服务器 / 退出登录"}, (dialog, which) -> logoutToLogin())
+                .show();
+    }
+
+    private void logoutToLogin() {
+        preferences.edit()
+                .remove(KEY_PASSWORD)
+                .apply();
+        password = "";
+        username = preferences.getString(KEY_USERNAME, DEFAULT_USERNAME);
+        baseUrl = normalizeBaseUrl(preferences.getString(KEY_BASE_URL, DEFAULT_BASE_URL));
+        webView.stopLoading();
+        webView.loadUrl("about:blank");
+        showLogin();
+    }
+
+    private LinearLayout.LayoutParams navWeight() {
+        return new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1);
+    }
+
+    private TextView createNavText(String label) {
+        TextView tab = new TextView(this);
+        tab.setText(label);
+        tab.setTextSize(16);
+        tab.setGravity(Gravity.CENTER);
+        tab.setSingleLine(true);
+        tab.setTextColor(0xFF8C8C8C);
+        tab.setTypeface(Typeface.DEFAULT, Typeface.NORMAL);
+        return tab;
+    }
+
+    private View createAddButton() {
+        FrameLayout slot = new FrameLayout(this);
+        TextView button = new TextView(this);
+        button.setText("+");
+        button.setTextSize(35);
+        button.setTextColor(0xFFFFFFFF);
+        button.setGravity(Gravity.CENTER);
+        button.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+        button.setIncludeFontPadding(false);
+        GradientDrawable background = new GradientDrawable();
+        background.setColor(0xFFFF2442);
+        background.setCornerRadius(dp(13));
+        button.setBackground(background);
+        FrameLayout.LayoutParams inner = new FrameLayout.LayoutParams(dp(52), dp(42), Gravity.CENTER);
+        inner.gravity = Gravity.CENTER;
+        inner.bottomMargin = dp(-2);
+        slot.addView(button, inner);
+        return slot;
+    }
+
+    private void switchWebView(String view) {
+        if (webView == null) {
+            return;
+        }
+        String target = "collect".equals(view) ? "collect" : "home";
+        selectNativeTab(target);
+        webView.evaluateJavascript("if (window.setActiveView) window.setActiveView('" + target + "');", null);
+    }
+
+    private void selectNativeTab(String active) {
+        setNativeTabState(homeTab, "home".equals(active));
+        setNativeTabState(collectTab, "collect".equals(active));
+        setNativeTabState(chatTab, false);
+        setNativeTabState(meTab, false);
+    }
+
+    private void setNativeTabState(TextView tab, boolean active) {
+        if (tab == null) {
+            return;
+        }
+        tab.setTextColor(active ? 0xFF222222 : 0xFF8C8C8C);
+        tab.setTypeface(Typeface.DEFAULT, active ? Typeface.BOLD : Typeface.NORMAL);
+    }
+
+    private void hideWebBottomNav() {
+        if (webView == null) {
+            return;
+        }
+        webView.evaluateJavascript(
+                "document.documentElement.classList.add('native-bottom-nav');",
+                null
+        );
     }
 
     private View createLoginView() {
@@ -163,10 +296,17 @@ public class MainActivity extends Activity {
         topRow.addView(back, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1));
 
         TextView mode = new TextView(this);
-        mode.setText("密码登录");
+        mode.setText("切换服务器");
         mode.setTextSize(18);
         mode.setTextColor(0xFF9B9B9B);
         mode.setGravity(Gravity.CENTER_VERTICAL | Gravity.RIGHT);
+        mode.setOnClickListener(view -> {
+            preferences.edit()
+                    .remove(KEY_PASSWORD)
+                    .apply();
+            password = "";
+            showLogin();
+        });
         topRow.addView(mode, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1));
 
         TextView title = new TextView(this);
@@ -197,18 +337,18 @@ public class MainActivity extends Activity {
         agreementParams.setMargins(0, dp(14), 0, dp(10));
         container.addView(agreement, agreementParams);
 
-        TextView circle = new TextView(this);
-        circle.setText("○");
-        circle.setTextSize(20);
-        circle.setTextColor(0xFF8A8A8A);
-        circle.setGravity(Gravity.CENTER);
-        agreement.addView(circle, new LinearLayout.LayoutParams(dp(24), dp(32)));
+        agreementCheckBox = new CheckBox(this);
+        agreementCheckBox.setButtonTintList(android.content.res.ColorStateList.valueOf(0xFF222222));
+        agreementCheckBox.setPadding(0, 0, 0, 0);
+        agreementCheckBox.setOnCheckedChangeListener((buttonView, isChecked) -> updateLoginButtonState());
+        agreement.addView(agreementCheckBox, new LinearLayout.LayoutParams(dp(24), dp(32)));
 
         TextView agreementText = new TextView(this);
         agreementText.setText("我已阅读并同意《用户协议》《隐私政策》");
         agreementText.setTextSize(14);
         agreementText.setTextColor(0xFF8A8A8A);
         agreementText.setLineSpacing(2, 1.0f);
+        agreementText.setOnClickListener(view -> agreementCheckBox.setChecked(!agreementCheckBox.isChecked()));
         agreement.addView(agreementText, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1));
 
         loginButton = new Button(this);
@@ -228,25 +368,6 @@ public class MainActivity extends Activity {
         loginStatus.setGravity(Gravity.CENTER);
         loginStatus.setPadding(0, dp(18), 0, 0);
         container.addView(loginStatus, matchWidth(dp(72)));
-
-        TextView divider = new TextView(this);
-        divider.setText("—  其他方式登录  —");
-        divider.setTextSize(14);
-        divider.setTextColor(0xFFD0D0D0);
-        divider.setGravity(Gravity.CENTER);
-        LinearLayout.LayoutParams dividerParams = matchWidth(dp(44));
-        dividerParams.setMargins(0, dp(144), 0, dp(16));
-        container.addView(divider, dividerParams);
-
-        LinearLayout socialRow = new LinearLayout(this);
-        socialRow.setOrientation(LinearLayout.HORIZONTAL);
-        socialRow.setGravity(Gravity.CENTER);
-        container.addView(socialRow, matchWidth(dp(72)));
-
-        addSocialButton(socialRow, "微", 0xFF36C263);
-        addSocialButton(socialRow, "QQ", 0xFF111111);
-        addSocialButton(socialRow, "博", 0xFFE64235);
-        addSocialButton(socialRow, "", 0xFF111111);
 
         TextWatcher watcher = new TextWatcher() {
             @Override
@@ -274,10 +395,12 @@ public class MainActivity extends Activity {
         WebSettings settings = webView.getSettings();
         settings.setJavaScriptEnabled(true);
         settings.setDomStorageEnabled(true);
+        settings.setCacheMode(WebSettings.LOAD_NO_CACHE);
         settings.setLoadWithOverviewMode(true);
         settings.setUseWideViewPort(true);
         settings.setMixedContentMode(WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE);
         webView.setOverScrollMode(View.OVER_SCROLL_NEVER);
+        webView.clearCache(true);
 
         webView.setWebChromeClient(new WebChromeClient() {
             @Override
@@ -295,6 +418,7 @@ public class MainActivity extends Activity {
             @Override
             public void onPageFinished(WebView view, String url) {
                 progressBar.setVisibility(View.GONE);
+                hideWebBottomNav();
                 if (pendingSharedText != null && !pendingSharedText.trim().isEmpty()) {
                     String text = pendingSharedText;
                     pendingSharedText = null;
@@ -346,7 +470,20 @@ public class MainActivity extends Activity {
     private void showLogin() {
         loginView.setVisibility(View.VISIBLE);
         webView.setVisibility(View.GONE);
+        bottomNav.setVisibility(View.GONE);
         progressBar.setVisibility(View.GONE);
+        if (serverInput != null) {
+            serverInput.setText(preferences.getString(KEY_BASE_URL, DEFAULT_BASE_URL));
+        }
+        if (usernameInput != null) {
+            usernameInput.setText(preferences.getString(KEY_USERNAME, DEFAULT_USERNAME));
+        }
+        if (passwordInput != null) {
+            passwordInput.setText("");
+        }
+        if (agreementCheckBox != null) {
+            agreementCheckBox.setChecked(false);
+        }
         loginButton.setEnabled(true);
         updateLoginButtonState();
     }
@@ -354,6 +491,8 @@ public class MainActivity extends Activity {
     private void showBrowser() {
         loginView.setVisibility(View.GONE);
         webView.setVisibility(View.VISIBLE);
+        bottomNav.setVisibility(View.VISIBLE);
+        selectNativeTab("home");
         webView.loadUrl(viewerUrl());
     }
 
@@ -527,6 +666,7 @@ public class MainActivity extends Activity {
         pendingUpdateInfo = updateInfo;
         loginView.setVisibility(View.GONE);
         webView.setVisibility(View.GONE);
+        bottomNav.setVisibility(View.GONE);
         progressBar.setVisibility(View.GONE);
         new AlertDialog.Builder(this)
                 .setTitle(updateInfo.title)
@@ -625,11 +765,14 @@ public class MainActivity extends Activity {
     }
 
     private String viewerUrl() {
-        return baseUrl + "/viewer/";
+        return String.format(Locale.US, "%s/viewer/?_=%d", baseUrl, System.currentTimeMillis());
     }
 
     private String normalizeBaseUrl(String value) {
         String normalized = value == null ? "" : value.trim();
+        if (!normalized.isEmpty() && !normalized.contains("://")) {
+            normalized = "http://" + normalized;
+        }
         while (normalized.endsWith("/")) {
             normalized = normalized.substring(0, normalized.length() - 1);
         }
@@ -679,26 +822,15 @@ public class MainActivity extends Activity {
         return wrapper;
     }
 
-    private void addSocialButton(LinearLayout row, String label, int color) {
-        TextView button = new TextView(this);
-        button.setText(label);
-        button.setTextSize(label.length() > 1 ? 14 : 24);
-        button.setTextColor(color);
-        button.setGravity(Gravity.CENTER);
-        button.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
-        button.setBackgroundResource(com.linkcollector.viewer.R.drawable.login_social_circle);
-        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(dp(56), dp(56));
-        params.setMargins(dp(10), 0, dp(10), 0);
-        row.addView(button, params);
-    }
-
     private void updateLoginButtonState() {
         if (loginButton == null || serverInput == null || usernameInput == null || passwordInput == null) {
             return;
         }
         boolean complete = !serverInput.getText().toString().trim().isEmpty()
                 && !usernameInput.getText().toString().trim().isEmpty()
-                && !passwordInput.getText().toString().isEmpty();
+                && !passwordInput.getText().toString().isEmpty()
+                && agreementCheckBox != null
+                && agreementCheckBox.isChecked();
         loginButton.setEnabled(complete);
         loginButton.setBackgroundResource(complete
                 ? com.linkcollector.viewer.R.drawable.login_button_enabled

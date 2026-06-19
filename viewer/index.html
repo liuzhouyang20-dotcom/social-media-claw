@@ -12,7 +12,7 @@
       --muted: #8f8f8f;
       --line: #eeeeee;
       --bar: rgba(255, 255, 255, .96);
-      --bottom-height: 59px;
+      --bottom-height: 68px;
     }
 
     * { box-sizing: border-box; }
@@ -142,8 +142,8 @@
       min-width: 0;
       display: flex;
       align-items: center;
-      justify-content: flex-start;
-      gap: 24px;
+      justify-content: center;
+      gap: 16px;
       overflow-x: auto;
       overscroll-behavior-x: contain;
       scrollbar-width: none;
@@ -180,46 +180,6 @@
       border-radius: 999px;
       background: var(--red);
       transform: translateX(-50%);
-    }
-
-    .topic-row {
-      height: 44px;
-      display: flex;
-      align-items: center;
-      gap: 18px;
-      overflow-x: auto;
-      overscroll-behavior-x: contain;
-      padding: 0 14px;
-      scrollbar-width: none;
-      border-top: 1px solid #f4f4f4;
-    }
-
-    .topic-row::-webkit-scrollbar { display: none; }
-
-    .topic {
-      border: 0;
-      background: transparent;
-      padding: 0;
-      color: #9b9b9b;
-      font-size: 15px;
-      white-space: nowrap;
-      flex: 0 0 auto;
-    }
-
-    .topic.active {
-      color: #343434;
-      font-weight: 760;
-    }
-
-    .topic.more {
-      margin-left: auto;
-      color: #757575;
-      font-size: 20px;
-      line-height: 1;
-      position: sticky;
-      right: 0;
-      padding-left: 12px;
-      background: linear-gradient(90deg, rgba(255,255,255,0), #fff 36%);
     }
 
     .search-bar {
@@ -608,6 +568,40 @@
       padding-bottom: calc(var(--bottom-height) + env(safe-area-inset-bottom));
     }
 
+    .pull-refresh {
+      height: 0;
+      display: grid;
+      place-items: center;
+      overflow: hidden;
+      color: #8a8a8a;
+      font-size: 13px;
+      transition: height .18s ease;
+    }
+
+    .pull-refresh.visible {
+      height: 48px;
+    }
+
+    .pull-spinner {
+      width: 18px;
+      height: 18px;
+      margin-right: 7px;
+      border: 2px solid #dedede;
+      border-top-color: var(--red);
+      border-radius: 50%;
+      display: none;
+      vertical-align: -4px;
+      animation: spin .8s linear infinite;
+    }
+
+    .pull-refresh.refreshing .pull-spinner {
+      display: inline-block;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
     .feed {
       padding: 0 5px 12px;
       columns: 2;
@@ -748,11 +742,10 @@
       position: relative;
       height: 100%;
       min-height: 0;
-      padding: calc(env(safe-area-inset-top) + 24px) 18px calc(var(--bottom-height) + env(safe-area-inset-bottom) + 26px);
+      padding: calc(env(safe-area-inset-top) + 22px) 18px calc(var(--bottom-height) + env(safe-area-inset-bottom) + 22px);
       background:
-        linear-gradient(rgba(0,0,0,.54), rgba(0,0,0,.72)),
-        radial-gradient(circle at 20% 15%, rgba(255,255,255,.18), transparent 28%),
-        linear-gradient(135deg, #7d8b66, #344130 42%, #181818);
+        linear-gradient(180deg, #fbfbfa 0%, #f4f6f5 45%, #ffffff 100%);
+      color: #202423;
       overflow-x: hidden;
       overflow-y: auto;
       overscroll-behavior-y: contain;
@@ -761,238 +754,249 @@
 
     .collect-view.active { display: block; }
 
-    .collect-view::before,
+    .collect-view::before {
+      content: "";
+      position: absolute;
+      inset: 0 0 auto;
+      height: 214px;
+      pointer-events: none;
+      background:
+        linear-gradient(135deg, rgba(255,36,66,.11), transparent 36%),
+        linear-gradient(180deg, rgba(27,117,86,.11), transparent 74%);
+      border-bottom: 1px solid rgba(24,31,29,.06);
+    }
+
     .collect-view::after {
       content: "";
       position: absolute;
-      border-radius: 999px;
-      opacity: .32;
-      filter: blur(1px);
-      background: rgba(255,255,255,.18);
-    }
-
-    .collect-view::before {
-      width: 170px;
-      height: 170px;
-      top: 110px;
-      right: -52px;
-    }
-
-    .collect-view::after {
-      width: 220px;
-      height: 220px;
-      bottom: 80px;
-      left: -92px;
+      top: 18px;
+      right: 12px;
+      width: 148px;
+      height: 148px;
+      pointer-events: none;
+      background:
+        linear-gradient(90deg, rgba(24,31,29,.06) 1px, transparent 1px),
+        linear-gradient(180deg, rgba(24,31,29,.06) 1px, transparent 1px);
+      background-size: 18px 18px;
+      mask-image: linear-gradient(135deg, #000, transparent 72%);
+      opacity: .8;
     }
 
     .collect-top {
       position: relative;
       z-index: 1;
       display: flex;
-      align-items: center;
+      align-items: flex-start;
       justify-content: space-between;
-      color: rgba(255,255,255,.86);
+      gap: 16px;
+      max-width: 440px;
+      margin: 0 auto;
     }
 
-    .collect-menu {
-      width: 36px;
-      height: 30px;
-      display: grid;
-      align-content: center;
-      gap: 6px;
-    }
-
-    .collect-menu span {
+    .collect-eyebrow {
       display: block;
-      width: 28px;
-      height: 3px;
-      border-radius: 3px;
-      background: currentColor;
-    }
-
-    .collect-channel {
-      display: flex;
-      gap: 22px;
-      min-width: 0;
-      color: rgba(255,255,255,.48);
-      font-size: 18px;
-      white-space: nowrap;
-    }
-
-    .collect-channel strong {
-      position: relative;
-      color: #fff;
+      margin-bottom: 8px;
+      color: #68716e;
+      font-size: 12px;
+      line-height: 1;
       font-weight: 780;
+      letter-spacing: 0;
     }
 
-    .collect-channel strong::after {
-      content: "";
-      position: absolute;
-      left: 50%;
-      bottom: -8px;
-      width: 34px;
-      height: 3px;
-      border-radius: 999px;
-      background: rgba(255,255,255,.78);
-      transform: translateX(-50%);
+    .collect-title {
+      margin: 0;
+      color: #151817;
+      font-size: 30px;
+      line-height: 1.12;
+      font-weight: 900;
+      letter-spacing: 0;
     }
 
-    .collect-search {
-      width: 34px;
+    .collect-badge {
+      flex: 0 0 auto;
+      display: inline-flex;
+      align-items: center;
       height: 34px;
-      border: 3px solid currentColor;
-      border-radius: 50%;
-      position: relative;
-    }
-
-    .collect-search::after {
-      content: "";
-      position: absolute;
-      right: -8px;
-      bottom: -5px;
-      width: 11px;
-      height: 3px;
-      border-radius: 3px;
-      background: currentColor;
-      transform: rotate(45deg);
+      padding: 0 12px;
+      border: 1px solid rgba(21,24,23,.1);
+      border-radius: 8px;
+      background: rgba(255,255,255,.78);
+      color: #303634;
+      font-size: 13px;
+      font-weight: 720;
+      box-shadow: 0 8px 24px rgba(24,31,29,.08);
     }
 
     .collect-copy {
       position: relative;
       z-index: 1;
-      margin: 54px auto 28px;
-      color: rgba(255,255,255,.55);
-      text-align: center;
-      font-size: 20px;
-      line-height: 2.1;
-      text-shadow: 0 1px 12px rgba(0,0,0,.4);
+      max-width: 440px;
+      margin: 14px auto 18px;
+      color: #69716e;
+      font-size: 15px;
+      line-height: 1.55;
     }
 
     .collect-card {
       position: relative;
       z-index: 1;
       margin: 0 auto;
-      width: min(100%, 360px);
+      width: min(100%, 440px);
       overflow: hidden;
-      border-radius: 24px;
-      background: rgba(255,255,255,.97);
-      box-shadow: 0 20px 80px rgba(0,0,0,.32);
+      border: 1px solid rgba(23,29,27,.08);
+      border-radius: 8px;
+      background: rgba(255,255,255,.96);
+      box-shadow: 0 18px 46px rgba(24,31,29,.13);
     }
 
     .collect-preview {
-      height: 245px;
-      display: grid;
-      place-items: center;
-      padding: 26px;
+      min-height: 116px;
+      display: flex;
+      flex-direction: column;
+      justify-content: flex-end;
+      gap: 12px;
+      padding: 22px 22px 20px;
       background:
-        linear-gradient(rgba(0,0,0,.08), rgba(0,0,0,.12)),
-        radial-gradient(circle at 18% 18%, #9b5cff 0 7%, transparent 8%),
-        radial-gradient(circle at 78% 23%, #ec3d61 0 8%, transparent 9%),
-        radial-gradient(circle at 30% 70%, #2fad81 0 9%, transparent 10%),
-        radial-gradient(circle at 72% 72%, #e6c135 0 8%, transparent 9%),
-        linear-gradient(135deg, #d8d2c8, #a1b3a2);
+        linear-gradient(135deg, rgba(255,36,66,.14), transparent 44%),
+        linear-gradient(160deg, #1c2421 0%, #2f4039 55%, #f4f0e8 56%, #ffffff 100%);
       color: #fff;
-      text-align: center;
+      text-align: left;
+    }
+
+    .collect-preview-label {
+      width: fit-content;
+      padding: 5px 8px;
+      border: 1px solid rgba(255,255,255,.26);
+      border-radius: 6px;
+      background: rgba(255,255,255,.11);
+      color: rgba(255,255,255,.86);
+      font-size: 11px;
+      line-height: 1;
+      font-weight: 760;
+      letter-spacing: 0;
     }
 
     .collect-preview h2 {
+      max-width: 280px;
       margin: 0;
       color: #fff;
-      font-size: 30px;
-      line-height: 1.25;
+      font-size: 24px;
+      line-height: 1.22;
       font-weight: 900;
-      text-shadow: 0 2px 12px rgba(0,0,0,.28);
+      letter-spacing: 0;
+      text-shadow: 0 1px 10px rgba(0,0,0,.18);
     }
 
     .collect-body {
-      padding: 28px 24px 26px;
-      text-align: center;
+      padding: 20px;
+      text-align: left;
     }
 
     .detect-title {
-      min-height: 32px;
-      margin: 0 0 18px;
-      color: #292929;
-      font-size: 20px;
-      font-weight: 760;
+      min-height: 23px;
+      margin: 0 0 10px;
+      color: #252a28;
+      font-size: 16px;
+      line-height: 1.45;
+      font-weight: 780;
       overflow-wrap: anywhere;
     }
 
     .source-box {
       width: 100%;
-      min-height: 118px;
-      border: 0;
+      min-height: 132px;
+      border: 1px solid #e2e6e4;
       outline: 0;
       resize: vertical;
-      border-radius: 16px;
+      border-radius: 8px;
       padding: 14px;
-      background: #f4f4f4;
-      color: #333;
+      background: #f8f9f8;
+      color: #272d2b;
       font-size: 15px;
-      line-height: 1.5;
+      line-height: 1.55;
       text-align: left;
+      transition: border-color .18s ease, box-shadow .18s ease, background .18s ease;
     }
 
-    .source-box::placeholder { color: #aaa; }
+    .source-box:focus {
+      border-color: rgba(255,36,66,.55);
+      background: #fff;
+      box-shadow: 0 0 0 4px rgba(255,36,66,.08);
+    }
+
+    .source-box::placeholder { color: #9ba29f; }
 
     .collect-options {
-      display: flex;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
       align-items: center;
-      justify-content: space-between;
       gap: 10px;
       margin-top: 12px;
-      color: #777;
-      font-size: 13px;
+      color: #5e6764;
+      font-size: 14px;
     }
 
     .collect-options select {
-      height: 36px;
-      min-width: 96px;
-      border: 0;
-      border-radius: 10px;
-      padding: 0 10px;
-      background: #f4f4f4;
-      color: #555;
+      width: 100%;
+      height: 42px;
+      min-width: 0;
+      border: 1px solid #e2e6e4;
+      border-radius: 8px;
+      padding: 0 12px;
+      background: #fff;
+      color: #303634;
     }
 
     .collect-toggle {
+      height: 42px;
       display: inline-flex;
       align-items: center;
-      gap: 6px;
+      gap: 8px;
+      padding: 0 12px;
+      border: 1px solid #e2e6e4;
+      border-radius: 8px;
+      background: #fff;
+      color: #303634;
       white-space: nowrap;
     }
 
     .collect-toggle input {
-      width: 16px;
-      height: 16px;
+      width: 17px;
+      height: 17px;
       accent-color: var(--red);
     }
 
     .collect-action {
       width: 100%;
-      height: 58px;
-      margin-top: 18px;
+      height: 52px;
+      margin-top: 14px;
       border: 0;
-      border-radius: 15px;
-      background: var(--red);
+      border-radius: 8px;
+      background: #151817;
       color: #fff;
-      font-size: 20px;
-      font-weight: 820;
-      box-shadow: 0 12px 24px rgba(255,36,66,.18);
+      font-size: 17px;
+      font-weight: 840;
+      box-shadow: 0 14px 26px rgba(21,24,23,.18);
+      transition: transform .16s ease, box-shadow .16s ease, background .16s ease;
+    }
+
+    .collect-action:not(:disabled):active {
+      transform: translateY(1px);
+      box-shadow: 0 8px 18px rgba(21,24,23,.16);
     }
 
     .collect-action:disabled {
-      background: #e6e6e6;
-      color: #fff;
+      background: #d9dedb;
+      color: rgba(255,255,255,.92);
       box-shadow: none;
     }
 
     .collect-foot {
-      min-height: 24px;
-      margin: 14px 0 0;
-      color: #8d8d8d;
-      font-size: 14px;
-      line-height: 1.5;
+      min-height: 22px;
+      margin: 12px 0 0;
+      color: #78807d;
+      font-size: 13px;
+      line-height: 1.45;
       overflow-wrap: anywhere;
     }
 
@@ -1064,6 +1068,39 @@
       font-size: 14px;
     }
 
+    .app-toast {
+      position: fixed;
+      left: 50%;
+      bottom: calc(var(--bottom-height) + env(safe-area-inset-bottom) + 18px);
+      z-index: 36;
+      max-width: min(330px, calc(100vw - 44px));
+      padding: 10px 14px;
+      border-radius: 999px;
+      background: rgba(30, 30, 30, .9);
+      color: #fff;
+      font-size: 13px;
+      line-height: 1.35;
+      text-align: center;
+      opacity: 0;
+      pointer-events: none;
+      transform: translate(-50%, 10px);
+      transition: opacity .18s ease, transform .18s ease;
+      overflow-wrap: anywhere;
+    }
+
+    .app-toast.show {
+      opacity: 1;
+      transform: translate(-50%, 0);
+    }
+
+    .app-toast.ok {
+      background: rgba(22, 121, 76, .94);
+    }
+
+    .app-toast.error {
+      background: rgba(199, 34, 57, .94);
+    }
+
     .bottom-nav {
       position: fixed;
       left: 0;
@@ -1071,13 +1108,21 @@
       bottom: 0;
       z-index: 12;
       height: calc(var(--bottom-height) + env(safe-area-inset-bottom));
-      padding: 6px 14px env(safe-area-inset-bottom);
+      padding: 7px 20px env(safe-area-inset-bottom);
       display: grid;
-      grid-template-columns: 1fr 1fr 58px 1fr 1fr;
-      align-items: center;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 74px minmax(0, 1fr) minmax(0, 1fr);
+      align-items: end;
       background: var(--bar);
       backdrop-filter: blur(16px);
       border-top: 1px solid var(--line);
+    }
+
+    .native-bottom-nav .bottom-nav {
+      display: none;
+    }
+
+    .native-bottom-nav .app-toast {
+      bottom: calc(86px + env(safe-area-inset-bottom) + 14px);
     }
 
     .nav-item {
@@ -1085,32 +1130,37 @@
       border: 0;
       background: transparent;
       color: #8c8c8c;
-      height: 47px;
+      height: 54px;
       padding: 0;
       display: grid;
       place-items: center;
-      font-size: 14px;
-      font-weight: 650;
+      font-size: 20px;
+      line-height: 1;
+      font-weight: 520;
+      letter-spacing: 0;
+      white-space: nowrap;
     }
 
     .nav-item.active {
       color: #222;
-      font-weight: 800;
+      font-weight: 900;
     }
 
     .add-btn {
       position: relative;
-      width: 44px;
-      height: 31px;
+      width: 58px;
+      height: 48px;
       border: 0;
-      border-radius: 9px;
+      border-radius: 13px;
       background: var(--red);
       color: transparent;
       display: grid;
       place-items: center;
       justify-self: center;
+      align-self: center;
       overflow: hidden;
-      box-shadow: 0 5px 12px rgba(255,36,66,.22);
+      transform: translateY(-2px);
+      box-shadow: 0 7px 16px rgba(255,36,66,.22);
     }
 
     .add-btn::before,
@@ -1125,13 +1175,13 @@
     }
 
     .add-btn::before {
-      width: 18px;
-      height: 2px;
+      width: 25px;
+      height: 4px;
     }
 
     .add-btn::after {
-      width: 2px;
-      height: 18px;
+      width: 4px;
+      height: 25px;
     }
 
     .modal {
@@ -1750,6 +1800,16 @@
       line-height: 1;
     }
 
+    @media (max-width: 360px) {
+      .collect-options {
+        grid-template-columns: 1fr;
+      }
+
+      .collect-toggle {
+        justify-content: flex-start;
+      }
+    }
+
     @media (min-width: 700px) {
       .app {
         width: min(430px, 100vw);
@@ -1775,32 +1835,27 @@
 </head>
 <body>
   <div class="app">
+    <div id="appToast" class="app-toast" role="status" aria-live="polite"></div>
     <section id="homeView" class="view active">
       <header class="home-top">
         <div class="primary-nav">
           <button class="icon-btn" type="button" aria-label="对话"><span class="bubble-icon"></span></button>
           <nav class="main-tabs" aria-label="主导航">
-            <button class="main-tab" type="button">关注</button>
-            <button class="main-tab active" type="button">发现</button>
-            <button class="main-tab" type="button">附近</button>
+            <button class="main-tab active" type="button" data-filter="all">全部</button>
+            <button class="main-tab" type="button" data-filter="xhs">小红书</button>
+            <button class="main-tab" type="button" data-filter="douyin">抖音</button>
+            <button class="main-tab" type="button" data-filter="image">图文</button>
+            <button class="main-tab" type="button" data-filter="video">视频</button>
           </nav>
           <button id="searchToggle" class="icon-btn" type="button" aria-label="搜索"><span class="search-icon"></span></button>
-        </div>
-        <div class="topic-row" aria-label="内容频道">
-          <button class="topic active" type="button" data-filter="all">推荐</button>
-          <button class="topic" type="button" data-filter="video">视频</button>
-          <button class="topic" type="button" data-filter="xhs">小红书</button>
-          <button class="topic" type="button" data-filter="douyin">抖音</button>
-          <button class="topic" type="button" data-filter="image">图文</button>
-          <button class="topic" type="button" data-filter="all">收藏</button>
-          <button class="topic more" type="button" aria-label="更多">⌄</button>
         </div>
         <div id="searchBar" class="search-bar">
           <input id="search" class="search-input" type="search" placeholder="搜索已采集内容">
           <button id="searchClose" class="search-close" type="button">取消</button>
         </div>
       </header>
-      <main class="scroll-area">
+      <main id="homeScroll" class="scroll-area">
+        <div id="pullRefresh" class="pull-refresh"><span class="pull-spinner"></span><span id="pullText">下拉刷新</span></div>
         <section id="grid" class="feed"></section>
       </main>
     </section>
@@ -1856,18 +1911,21 @@
 
     <section id="collectView" class="view collect-view">
       <div class="collect-top">
-        <div class="collect-menu" aria-hidden="true"><span></span><span></span><span></span></div>
-        <div class="collect-channel"><span>直播</span><span>团购</span><strong>采集</strong><span>推荐</span></div>
-        <span class="collect-search" aria-hidden="true"></span>
+        <div>
+          <span class="collect-eyebrow">NEW COLLECT</span>
+          <h1 class="collect-title">采集新内容</h1>
+        </div>
+        <span class="collect-badge">手动确认</span>
       </div>
-      <div class="collect-copy">复制分享口令后<br>粘贴到这里<br>我来帮你采集</div>
+      <div class="collect-copy">粘贴小红书或抖音分享口令，确认平台和媒体选项后再开始采集。</div>
       <form id="collector" class="collect-card">
         <div class="collect-preview">
+          <span class="collect-preview-label">识别状态</span>
           <h2 id="detectHeadline">还没粘贴链接吗</h2>
         </div>
         <div class="collect-body">
           <p id="detectTitle" class="detect-title">粘贴小红书或抖音分享文本</p>
-          <textarea id="source" class="source-box" placeholder="例如：复制小红书/抖音分享口令，回到这里粘贴，会自动识别并开始采集。"></textarea>
+          <textarea id="source" class="source-box" placeholder="例如：复制小红书/抖音分享口令，回到这里粘贴，确认后点击采集。"></textarea>
           <div class="collect-options">
             <select id="platform" aria-label="平台">
               <option value="auto">自动识别</option>
@@ -1879,8 +1937,8 @@
               <span>下载媒体</span>
             </label>
           </div>
-          <button id="collectButton" class="collect-action" type="submit" disabled>打开看看</button>
-          <div id="status" class="collect-foot">这不是我复制的口令，我要重新粘贴 ›</div>
+          <button id="collectButton" class="collect-action" type="submit" disabled>开始采集</button>
+          <div id="status" class="collect-foot">粘贴分享口令后，可选择平台和是否下载媒体。</div>
         </div>
       </form>
     </section>
@@ -1937,6 +1995,9 @@
     const homeView = document.getElementById("homeView");
     const searchView = document.getElementById("searchView");
     const collectView = document.getElementById("collectView");
+    const homeScroll = document.getElementById("homeScroll");
+    const pullRefresh = document.getElementById("pullRefresh");
+    const pullText = document.getElementById("pullText");
     const grid = document.getElementById("grid");
     const searchGrid = document.getElementById("searchGrid");
     const search = document.getElementById("search");
@@ -1956,6 +2017,7 @@
     const downloadMedia = document.getElementById("downloadMedia");
     const collectButton = document.getElementById("collectButton");
     const status = document.getElementById("status");
+    const appToast = document.getElementById("appToast");
     const detectHeadline = document.getElementById("detectHeadline");
     const detectTitle = document.getElementById("detectTitle");
     const addButton = document.getElementById("addButton");
@@ -1966,7 +2028,13 @@
     let searchMode = "all";
     let searchTag = "all";
     let collecting = false;
-    let autoTimer = 0;
+    let autoCollectTimer = 0;
+    let lastAutoCollectSource = "";
+    let toastTimer = 0;
+    let pullStartY = 0;
+    let pullDistance = 0;
+    let pulling = false;
+    let refreshing = false;
     let suggestOffset = 0;
     const fallbackSuggestions = [
       "proceate 画画过程",
@@ -2077,6 +2145,7 @@
         renderSearch();
       }
     }
+    window.setActiveView = setActiveView;
 
     function sortedSearchItems(list) {
       const copy = [...list];
@@ -2353,42 +2422,134 @@
       status.className = `collect-foot ${kind}`.trim();
     }
 
+    function showToast(message, kind = "") {
+      clearTimeout(toastTimer);
+      appToast.textContent = message;
+      appToast.className = `app-toast ${kind} show`.trim();
+      toastTimer = setTimeout(() => {
+        appToast.classList.remove("show");
+      }, 2600);
+    }
+
     function updateDetectState() {
       const text = source.value.trim();
       const detected = detectPlatform(text);
+      clearTimeout(autoCollectTimer);
       if (detected && platform.value === "auto") {
         detectHeadline.textContent = `识别到${platformName(detected)}`;
-        detectTitle.textContent = `准备采集 ${platformName(detected)} 的作品`;
+        detectTitle.textContent = `确认后采集 ${platformName(detected)} 的作品`;
       } else if (text) {
-        detectHeadline.textContent = "已复制到口令";
-        detectTitle.textContent = "正在分析分享文本";
+        detectHeadline.textContent = "已粘贴分享口令";
+        detectTitle.textContent = "确认设置后点击开始采集";
       } else {
         detectHeadline.textContent = "还没粘贴链接吗";
         detectTitle.textContent = "粘贴小红书或抖音分享文本";
       }
       collectButton.disabled = !text || collecting;
-      collectButton.textContent = collecting ? "采集中…" : "打开看看";
-      clearTimeout(autoTimer);
-      if (text && !collecting) {
-        autoTimer = setTimeout(() => submitCollect(), 700);
+      collectButton.textContent = collecting ? "采集中…" : "开始采集";
+      if (!collecting) {
+        if (text) {
+          setCollectStatus(detected ? `已识别${platformName(detected)}，点击开始采集。` : "已粘贴内容，点击开始采集。");
+        } else {
+          setCollectStatus("粘贴分享口令后，可选择平台和是否下载媒体。");
+        }
+      }
+      if (text && !collecting && text !== lastAutoCollectSource) {
+        autoCollectTimer = setTimeout(() => {
+          if (source.value.trim() === text && !collecting) {
+            lastAutoCollectSource = text;
+            submitCollect();
+          }
+        }, 900);
       }
     }
 
     async function refreshItems() {
+      let refreshed = false;
       try {
         const response = await fetch("/api/items", { cache: "no-store" });
-        if (!response.ok) return;
+        if (!response.ok) return false;
         const data = await response.json();
         if (data.ok && Array.isArray(data.items)) {
           items = data.items;
           render();
           renderSearch();
           renderSearchDiscovery();
+          refreshed = true;
         }
       } catch (error) {
         // Static data.js keeps the page usable when the API is unavailable.
       }
+      return refreshed;
     }
+
+    function setPullState(state, distance = 0) {
+      const visible = state !== "idle";
+      pullRefresh.classList.toggle("visible", visible);
+      pullRefresh.classList.toggle("refreshing", state === "refreshing");
+      if (state === "pull") {
+        pullText.textContent = "下拉刷新";
+        pullRefresh.style.height = `${Math.min(64, Math.max(0, distance))}px`;
+      } else if (state === "ready") {
+        pullText.textContent = "松开刷新";
+        pullRefresh.style.height = "64px";
+      } else if (state === "refreshing") {
+        pullText.textContent = "刷新中";
+        pullRefresh.style.height = "48px";
+      } else if (state === "done") {
+        pullText.textContent = "刷新完成";
+        pullRefresh.style.height = "42px";
+      } else {
+        pullText.textContent = "下拉刷新";
+        pullRefresh.style.height = "";
+      }
+    }
+
+    async function runPullRefresh() {
+      refreshing = true;
+      setPullState("refreshing");
+      await refreshItems();
+      setPullState("done");
+      setTimeout(() => {
+        refreshing = false;
+        setPullState("idle");
+      }, 520);
+    }
+
+    homeScroll.addEventListener("touchstart", event => {
+      if (refreshing || homeScroll.scrollTop > 0) return;
+      pullStartY = event.touches[0].clientY;
+      pullDistance = 0;
+      pulling = true;
+    }, { passive: true });
+
+    homeScroll.addEventListener("touchmove", event => {
+      if (!pulling || refreshing) return;
+      pullDistance = Math.max(0, event.touches[0].clientY - pullStartY);
+      if (pullDistance <= 0 || homeScroll.scrollTop > 0) {
+        setPullState("idle");
+        return;
+      }
+      setPullState(pullDistance > 68 ? "ready" : "pull", pullDistance * .62);
+    }, { passive: true });
+
+    homeScroll.addEventListener("touchend", () => {
+      if (!pulling || refreshing) return;
+      const shouldRefresh = pullDistance > 68;
+      pulling = false;
+      pullDistance = 0;
+      if (shouldRefresh) {
+        runPullRefresh();
+      } else {
+        setPullState("idle");
+      }
+    });
+
+    homeScroll.addEventListener("touchcancel", () => {
+      pulling = false;
+      pullDistance = 0;
+      if (!refreshing) setPullState("idle");
+    });
 
     async function submitCollect() {
       const text = source.value.trim();
@@ -2396,19 +2557,26 @@
         if (!text) setCollectStatus("请先粘贴链接或分享文本。", "error");
         return;
       }
+      const submittedText = text;
+      const submittedPlatform = platform.value;
+      const submittedDownloadMedia = downloadMedia.checked;
+      lastAutoCollectSource = submittedText;
       collecting = true;
       collectButton.disabled = true;
-      collectButton.textContent = "采集中…";
       const detected = detectPlatform(text);
-      setCollectStatus(detected ? `已识别${platformName(detected)}，正在采集…` : "正在识别并采集，视频下载可能需要几十秒…");
+      source.value = "";
+      updateDetectState();
+      setCollectStatus("已放到后台采集，你可以继续浏览首页。", "ok");
+      showToast(detected ? `${platformName(detected)} 已开始后台采集` : "已开始后台采集");
+      setActiveView("home");
       try {
         const response = await fetch("/api/collect", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            source: text,
-            platform: platform.value,
-            downloadMedia: downloadMedia.checked,
+            source: submittedText,
+            platform: submittedPlatform,
+            downloadMedia: submittedDownloadMedia,
           }),
         });
         const data = await response.json().catch(() => ({}));
@@ -2416,15 +2584,15 @@
           throw new Error(data.error || `请求失败：${response.status}`);
         }
         items = Array.isArray(data.items) ? data.items : items;
-        source.value = "";
         render();
         renderSearch();
-        setCollectStatus(`采集完成，当前共 ${items.length} 条内容。`, "ok");
-        resultTitle.textContent = "已加入你的瀑布流";
-        resultMask.classList.add("open");
-        resultMask.setAttribute("aria-hidden", "false");
+        renderSearchDiscovery();
+        setCollectStatus(`后台采集完成，当前共 ${items.length} 条内容。`, "ok");
+        showToast(`采集成功，已加入首页`, "ok");
       } catch (error) {
-        setCollectStatus(error.message || "采集失败。", "error");
+        lastAutoCollectSource = "";
+        setCollectStatus(error.message || "后台采集失败。", "error");
+        showToast(error.message || "采集失败", "error");
       } finally {
         collecting = false;
         updateDetectState();
@@ -2505,9 +2673,9 @@
       });
     });
 
-    document.querySelectorAll(".topic[data-filter]").forEach(tab => {
+    document.querySelectorAll(".main-tab[data-filter]").forEach(tab => {
       tab.addEventListener("click", () => {
-        document.querySelectorAll(".topic").forEach(item => item.classList.remove("active"));
+        document.querySelectorAll(".main-tab").forEach(item => item.classList.remove("active"));
         tab.classList.add("active");
         filter = tab.dataset.filter;
         render();

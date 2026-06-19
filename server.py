@@ -29,24 +29,8 @@ COLLECTORS = {
 COLLECT_LOCK = threading.Lock()
 SAFE_VIEWER_SUFFIXES = {".html", ".js", ".css", ".png", ".jpg", ".jpeg", ".webp", ".svg", ".ico"}
 SAFE_MEDIA_SUFFIXES = {".jpg", ".jpeg", ".png", ".webp", ".gif", ".mp4", ".m4a"}
-APP_APK_URL = os.environ.get(
-    "LINK_APP_DOWNLOAD_URL",
-    "http://49.51.72.63/downloads/social-media-claw-debug.apk",
-)
-APP_VERSION = {
-    "ok": True,
-    "latestVersionCode": int(os.environ.get("LINK_APP_LATEST_VERSION_CODE", "4")),
-    "latestVersionName": os.environ.get("LINK_APP_LATEST_VERSION_NAME", "1.3"),
-    "minSupportedVersionCode": int(os.environ.get("LINK_APP_MIN_VERSION_CODE", "4")),
-    "forceUpdate": True,
-    "downloadUrl": APP_APK_URL,
-    "apkUrl": APP_APK_URL,
-    "title": os.environ.get("LINK_APP_UPDATE_TITLE", "发现新版本"),
-    "message": os.environ.get(
-        "LINK_APP_UPDATE_MESSAGE",
-        "当前版本需要更新后继续使用，已为你准备好最新安装包。",
-    ),
-}
+APP_APK_PATH = "/downloads/social-media-claw-debug.apk"
+APP_APK_URL = os.environ.get("LINK_APP_DOWNLOAD_URL")
 
 
 def auth_config() -> tuple[str, str] | None:
@@ -64,6 +48,38 @@ def json_response(handler: SimpleHTTPRequestHandler, status: int, payload: dict[
     handler.send_header("Cache-Control", "no-store")
     handler.end_headers()
     handler.wfile.write(body)
+
+
+def app_download_url(handler: SimpleHTTPRequestHandler) -> str:
+    if APP_APK_URL:
+        return APP_APK_URL
+
+    forwarded_proto = handler.headers.get("X-Forwarded-Proto")
+    forwarded_host = handler.headers.get("X-Forwarded-Host")
+    host = forwarded_host or handler.headers.get("Host")
+    if not host:
+        return APP_APK_PATH
+
+    proto = forwarded_proto or "http"
+    return f"{proto}://{host}{APP_APK_PATH}"
+
+
+def app_version(handler: SimpleHTTPRequestHandler) -> dict[str, Any]:
+    apk_url = app_download_url(handler)
+    return {
+        "ok": True,
+        "latestVersionCode": int(os.environ.get("LINK_APP_LATEST_VERSION_CODE", "4")),
+        "latestVersionName": os.environ.get("LINK_APP_LATEST_VERSION_NAME", "1.3"),
+        "minSupportedVersionCode": int(os.environ.get("LINK_APP_MIN_VERSION_CODE", "4")),
+        "forceUpdate": True,
+        "downloadUrl": apk_url,
+        "apkUrl": apk_url,
+        "title": os.environ.get("LINK_APP_UPDATE_TITLE", "发现新版本"),
+        "message": os.environ.get(
+            "LINK_APP_UPDATE_MESSAGE",
+            "当前版本需要更新后继续使用，已为你准备好最新安装包。",
+        ),
+    }
 
 
 def run_command(args: list[str], cwd: Path, timeout: int = 240) -> subprocess.CompletedProcess[str]:
@@ -213,7 +229,7 @@ class Handler(SimpleHTTPRequestHandler):
     def handle_static_get(self, send_body: bool = True) -> None:
         clean_path = urllib.parse.unquote(urllib.parse.urlparse(self.path).path)
         if clean_path == "/api/app-version":
-            json_response(self, HTTPStatus.OK, APP_VERSION)
+            json_response(self, HTTPStatus.OK, app_version(self))
             return
         if clean_path == "/healthz":
             if not self.is_authorized():

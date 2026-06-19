@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT="/home/ubuntu/repos/social-media-claw"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 APK_SRC="$ROOT/android-app/app/build/outputs/apk/debug/app-debug.apk"
 APK_DST="$ROOT/downloads/social-media-claw-debug.apk"
 SERVICE="link-collector-viewer.service"
 AUTH_ARGS=()
-ENV_FILE="/home/ubuntu/.config/link-collector-viewer/env"
+ENV_FILE="${LINK_VIEWER_ENV_FILE:-$HOME/.config/link-collector-viewer/env}"
 
 if [[ -f "$ENV_FILE" ]]; then
   set -a

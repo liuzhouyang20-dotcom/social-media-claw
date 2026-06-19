@@ -94,6 +94,8 @@ def build_item(directory: Path) -> dict | None:
 
 
 def main() -> None:
+    COLLECT_DIR.mkdir(parents=True, exist_ok=True)
+
     items = []
     for directory in sorted(path for path in COLLECT_DIR.iterdir() if path.is_dir()):
         item = build_item(directory)
