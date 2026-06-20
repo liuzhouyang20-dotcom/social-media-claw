@@ -1,0 +1,48 @@
+[
+  {
+    "name": "程序员三千-免费使用codex生图、生视频！ #ai #Codex #程序员 #Agnes #计算机",
+    "title": "免费使用codex生图、生视频！ #ai  #Codex  #程序员  #Agnes  #计算机",
+    "platform": "douyin",
+    "contentType": "video",
+    "mediaComplete": false,
+    "expected": [
+      "cover",
+      "dynamic_cover",
+      "video"
+    ],
+    "present": [
+      "cover",
+      "dynamic_cover"
+    ],
+    "missing": [
+      "video"
+    ],
+    "errors": [],
+    "files": [
+      "程序员三千-免费使用codex生图、生视频！ #ai #Codex #程序员 #Agnes #计算机-cover.webp",
+      "程序员三千-免费使用codex生图、生视频！ #ai #Codex #程序员 #Agnes #计算机-dynamic_cover.webp"
+    ]
+  },
+  {
+    "name": "风行体育-亮亮-好奇问一下，大家现在都用Codex搞什么项目？我建了个交流群一起交流。禁止一切广告#Codex#ClaudeCode #Agent #Vibecoding",
+    "title": "好奇问一下，大家现在都用Codex搞什么项目？我建了个交流群一起交流。禁止一切广告#Codex#ClaudeCode #Agent #Vibecoding",
+    "platform": "douyin",
+    "contentType": "image",
+    "mediaComplete": true,
+    "expected": [
+      "cover",
+      "audio"
+    ],
+    "present": [
+      "audio",
+      "cover"
+    ],
+    "missing": [],
+    "errors": [],
+    "files": [
+      "风行体育-亮亮-好奇问一下，大家现在都用Codex搞什么项目？我建了个交流群一起交流。禁止一切广告#Codex#ClaudeCode #Agent #Vibecoding-audio.m4a",
+      "风行体育-亮亮-好奇问一下，大家现在都用Codex搞什么项目？我建了个交流群一起交流。禁止一切广告#Codex#ClaudeCode #Agent #Vibecoding-audio.mp3",
+      "风行体育-亮亮-好奇问一下，大家现在都用Codex搞什么项目？我建了个交流群一起交流。禁止一切广告#Codex#ClaudeCode #Agent #Vibecoding-cover.jpeg"
+    ]
+  }
+]

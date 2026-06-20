@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+from concurrent.futures import ThreadPoolExecutor
 import hashlib
 import json
 import mimetypes
@@ -13,6 +14,7 @@ import shutil
 import subprocess
 import sys
 import time
+import threading
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -23,9 +25,16 @@ from typing import Any
 
 DEFAULT_BASE_URL = "https://api.tikhub.io"
 DEFAULT_OUTPUT_DIR = Path(__file__).resolve().parents[1] / "采集文件夹"
+SHORT_LINK_USER_AGENTS = [
+    "xhs-tikhub-collector/1.0",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36",
+    "Mozilla/5.0 (Linux; Android 14; Pixel 7) AppleWebKit/537.36 Chrome/124.0 Mobile Safari/537.36",
+    "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 Mobile/15E148",
+]
 API_PATHS = {
     "image": "/api/v1/xiaohongshu/app_v2/get_image_note_detail",
     "video": "/api/v1/xiaohongshu/app_v2/get_video_note_detail",
+    "web_v3": "/api/v1/xiaohongshu/web_v3/fetch_note_detail",
     "app_v1": "/api/v1/xiaohongshu/app/get_note_info",
 }
 SUCCESS_CODES = {0, 200}
@@ -57,6 +66,27 @@ MEDIA_HOST_HINTS = (
     "redcdn",
     "rednotecdn",
 )
+
+
+class DownloadRateLimiter:
+    def __init__(self, qps: float) -> None:
+        self.min_interval = 1.0 / qps if qps and qps > 0 else 0.0
+        self._lock = threading.Lock()
+        self._next_allowed = 0.0
+
+    def wait(self) -> None:
+        if self.min_interval <= 0:
+            return
+        while True:
+            with self._lock:
+                now = time.monotonic()
+                wait_time = self._next_allowed - now
+                if wait_time <= 0:
+                    self._next_allowed = now + self.min_interval
+                    return
+            time.sleep(min(wait_time, self.min_interval))
+
+
 AUDIO_SOURCE_EXTENSIONS = {
     ".mp4",
     ".mov",
@@ -184,6 +214,57 @@ def extract_note_id(source: str) -> str | None:
     return None
 
 
+def extract_xsec_token(source: str) -> str | None:
+    raw_url = extract_first_url(source) or source
+    parsed = urllib.parse.urlparse(raw_url)
+    token = urllib.parse.parse_qs(parsed.query).get("xsec_token", [""])[0]
+    return token or None
+
+
+def extract_first_url(source: str) -> str | None:
+    match = re.search(r"https?://[^\s\"'<>\)\]]+", source)
+    if not match:
+        return None
+    return match.group(0).rstrip(".,;，。")
+
+
+def resolve_xhs_short_link(source: str, timeout: int) -> str | None:
+    raw_url = extract_first_url(source)
+    if not raw_url:
+        return None
+    parsed = urllib.parse.urlparse(raw_url)
+    if "xhslink.com" not in parsed.netloc.lower():
+        return raw_url
+
+    for user_agent in SHORT_LINK_USER_AGENTS:
+        headers = {
+            "User-Agent": user_agent,
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+            "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
+        }
+        req = urllib.request.Request(raw_url, headers=headers)
+        try:
+            with urllib.request.urlopen(req, timeout=min(timeout, 15)) as response:
+                final_url = response.geturl()
+        except Exception:
+            continue
+        if "xiaohongshu.com" in urllib.parse.urlparse(final_url).netloc.lower():
+            return final_url
+    return None
+
+
+def type_from_url(url: str | None) -> str | None:
+    if not url:
+        return None
+    parsed = urllib.parse.urlparse(url)
+    query_type = urllib.parse.parse_qs(parsed.query).get("type", [""])[0].lower()
+    if query_type == "video":
+        return "video"
+    if query_type in {"normal", "image", "note"}:
+        return "image"
+    return None
+
+
 def safe_name(value: str, fallback: str = "xhs-note", max_length: int = 100) -> str:
     value = value.strip()[:max_length]
     value = re.sub(r"[\\/:*?\"<>|\r\n\t]+", "-", value)
@@ -191,46 +272,175 @@ def safe_name(value: str, fallback: str = "xhs-note", max_length: int = 100) -> 
     return value or fallback
 
 
+def safe_path_name(value: str, fallback: str = "xhs-note", max_bytes: int = 180) -> str:
+    value = safe_name(value, fallback=fallback, max_length=240)
+    while len(value.encode("utf-8")) > max_bytes:
+        value = value[:-1].strip(" .-_")
+    return value or fallback
+
+
+def note_value(item: dict[str, Any], *keys: str) -> Any:
+    for key in keys:
+        if key in item and item[key] not in (None, "", [], {}):
+            return item[key]
+    return None
+
+
+def note_user(item: dict[str, Any]) -> dict[str, Any]:
+    user = note_value(item, "user", "userInfo", "author")
+    return user if isinstance(user, dict) else {}
+
+
+def note_images(item: dict[str, Any]) -> list[Any]:
+    images = note_value(item, "images_list", "image_list", "imageList", "images")
+    return images if isinstance(images, list) else []
+
+
+def note_tags(item: dict[str, Any]) -> list[Any]:
+    tags = note_value(item, "hash_tag", "tag_list", "tagList", "tags")
+    return tags if isinstance(tags, list) else []
+
+
+def nested_urls(value: Any) -> list[str]:
+    urls: list[str] = []
+    if isinstance(value, dict):
+        for item in value.values():
+            urls.extend(nested_urls(item))
+    elif isinstance(value, list):
+        for item in value:
+            urls.extend(nested_urls(item))
+    elif isinstance(value, str):
+        if value.startswith(("http://", "https://")):
+            urls.append(value)
+        urls.extend(match.group(0) for match in re.finditer(r"https?://[^\s\"'<>\)\]]+", value))
+    return [url.rstrip(".,;，。") for url in urls]
+
+
+def first_nested_url(*values: Any) -> str | None:
+    for value in values:
+        for url in nested_urls(value):
+            return url
+    return None
+
+
+def is_video_url(url: str) -> bool:
+    parsed = urllib.parse.urlparse(url)
+    path = parsed.path.lower()
+    host = parsed.netloc.lower()
+    return path.endswith((".mp4", ".mov", ".m4v", ".m3u8")) or "sns-video" in host or "/stream/" in path
+
+
+def first_media_url(value: Any, kind: str) -> str | None:
+    seen: set[str] = set()
+    for url in nested_urls(value):
+        if url in seen:
+            continue
+        seen.add(url)
+        if kind == "video" and is_video_url(url):
+            return url
+        if kind == "image" and is_media_url(url) and not is_video_url(url):
+            return url
+    return None
+
+
+def normalize_note_item(item: dict[str, Any]) -> dict[str, Any]:
+    note_card = item.get("noteCard")
+    return note_card if isinstance(note_card, dict) else item
+
+
+def note_item_id(item: dict[str, Any]) -> str:
+    candidate = normalize_note_item(item)
+    value = note_value(item, "id", "note_id", "noteId") or note_value(
+        candidate,
+        "id",
+        "note_id",
+        "noteId",
+    )
+    return str(value or "")
+
+
+def looks_like_note_item(item: dict[str, Any]) -> bool:
+    if not isinstance(item, dict):
+        return False
+    return any(
+        item.get(key) not in (None, "", [], {})
+        for key in (
+            "video_info_v2",
+            "videoInfo",
+            "video",
+            "images_list",
+            "image_list",
+            "imageList",
+            "type",
+        )
+    )
+
+
 def build_slug(data: dict[str, Any], source: str) -> str:
     item = find_note_item(data, source) or {}
-    user = item.get("user") if isinstance(item.get("user"), dict) else {}
+    user = note_user(item)
     author = (
         user.get("nickname")
         or user.get("name")
         or find_first_by_keys(data, {"nickname", "nick_name", "username", "user_name"})
     )
     title = (
-        item.get("title")
-        or find_first_by_keys(data, {"title", "display_title"})
-        or item.get("desc")
+        note_value(item, "title", "display_title", "displayTitle")
+        or find_first_by_keys(data, {"title", "display_title", "displaytitle"})
+        or note_value(item, "desc", "description")
         or find_first_by_keys(data, {"desc", "description", "content"})
     )
     if author or title:
-        return safe_name(f"{author or 'unknown'}-{title or 'untitled'}", max_length=120)
+        return safe_path_name(f"{author or 'unknown'}-{title or 'untitled'}")
     return hashlib.sha1(source.encode("utf-8")).hexdigest()[:12]
 
 
 def summarize(data: dict[str, Any], endpoint: str, source: str) -> dict[str, Any]:
     keys = {
         "note_id": {"note_id", "noteid", "id", "noteidstr"},
-        "title": {"title", "display_title"},
+        "title": {"title", "display_title", "displaytitle"},
         "description": {"desc", "description", "content"},
         "nickname": {"nickname", "nick_name", "username", "user_name"},
-        "user_id": {"user_id", "userid", "user_id_str"},
-        "liked_count": {"liked_count", "like_count", "likes"},
-        "collected_count": {"collected_count", "collect_count", "collects"},
-        "comment_count": {"comment_count", "comments_count", "comments"},
-        "share_count": {"share_count", "shares"},
+        "user_id": {"user_id", "userid", "useridstr", "user_id_str"},
+        "liked_count": {"liked_count", "like_count", "likedcount", "likes"},
+        "collected_count": {"collected_count", "collect_count", "collectedcount", "collects"},
+        "comment_count": {"comment_count", "comments_count", "commentcount", "comments"},
+        "share_count": {"share_count", "shared_count", "sharecount", "shares"},
     }
+    item = find_note_item(data, source) or {}
+    user = note_user(item)
+    images = note_images(item)
+    hash_tags = note_tags(item)
     summary = {
         "collected_at": datetime.now().isoformat(timespec="seconds"),
         "source": source,
         "endpoint": endpoint,
     }
+    note_type = item.get("type") if isinstance(item.get("type"), str) else None
+    if note_type:
+        summary["note_type"] = note_type
     for output_key, possible_keys in keys.items():
         found = find_first_by_keys(data, possible_keys)
         if found not in (None, "", [], {}):
             summary[output_key] = found
+    author_avatar = first_url(
+        user.get("image"),
+        user.get("avatar"),
+        user.get("avatar_url"),
+        user.get("avatarUrl"),
+        find_first_by_keys(user, {"image", "avatar", "avatar_url"}),
+    )
+    if author_avatar:
+        summary["author_avatar"] = author_avatar
+    if images:
+        summary["image_count"] = len(images)
+    tags = [
+        str(tag.get("name") or tag.get("tag_name") or tag.get("tagName") or "").strip()
+        for tag in hash_tags
+        if isinstance(tag, dict) and str(tag.get("name") or tag.get("tag_name") or "").strip()
+    ]
+    if tags:
+        summary["hashtags"] = tags
     return summary
 
 
@@ -247,22 +457,21 @@ def iter_dicts(value: Any):
 def find_note_item(data: dict[str, Any], source: str) -> dict[str, Any] | None:
     note_id = extract_note_id(source)
     for item in iter_dicts(data):
-        if (
-            note_id
-            and str(item.get("id") or item.get("note_id") or "") == note_id
-            and (item.get("video_info_v2") or item.get("images_list"))
-        ):
-            return item
+        candidate = normalize_note_item(item)
+        if note_id and note_item_id(item) == note_id and looks_like_note_item(candidate):
+            return candidate
     for item in iter_dicts(data):
-        if item.get("video_info_v2") or item.get("images_list"):
-            return item
+        candidate = normalize_note_item(item)
+        if looks_like_note_item(candidate):
+            return candidate
     return None
 
 
 def first_url(*values: Any) -> str | None:
     for value in values:
-        if isinstance(value, str) and value.startswith(("http://", "https://")):
-            return value
+        url = first_nested_url(value)
+        if url:
+            return url
     return None
 
 
@@ -285,7 +494,8 @@ def best_stream_url(streams: dict[str, Any]) -> str | None:
 
 def primary_media(data: dict[str, Any], source: str) -> dict[str, str]:
     item = find_note_item(data, source) or {}
-    video_info = item.get("video_info_v2") if isinstance(item, dict) else {}
+    user = note_user(item)
+    video_info = note_value(item, "video_info_v2", "videoInfo", "video") if isinstance(item, dict) else {}
     if not isinstance(video_info, dict):
         video_info = {}
 
@@ -294,12 +504,25 @@ def primary_media(data: dict[str, Any], source: str) -> dict[str, str]:
     streams = media.get("stream") if isinstance(media.get("stream"), dict) else {}
 
     result: dict[str, str] = {}
-    images = item.get("images_list") if isinstance(item, dict) else None
+    author_avatar = first_url(
+        user.get("image"),
+        user.get("avatar"),
+        user.get("avatar_url"),
+        user.get("avatarUrl"),
+        find_first_by_keys(user, {"image", "avatar", "avatar_url"}),
+    )
+    if author_avatar:
+        result["author_avatar"] = author_avatar
+    images = note_images(item) if isinstance(item, dict) else None
     first_image = images[0] if isinstance(images, list) and images and isinstance(images[0], dict) else {}
     post_cover = first_url(
         first_image.get("original"),
         first_image.get("url"),
+        first_image.get("urlDefault"),
+        first_image.get("urlPre"),
+        first_image.get("infoList"),
         item.get("share_info", {}).get("image") if isinstance(item.get("share_info"), dict) else None,
+        item.get("shareInfo", {}).get("image") if isinstance(item.get("shareInfo"), dict) else None,
     )
     video_thumbnail = first_url(
         image_info.get("thumbnail"),
@@ -307,7 +530,7 @@ def primary_media(data: dict[str, Any], source: str) -> dict[str, str]:
         image_info.get("first_frame"),
     )
     first_frame = first_url(image_info.get("first_frame"), video_thumbnail)
-    video = best_stream_url(streams)
+    video = best_stream_url(streams) or first_media_url(video_info, "video") or first_media_url(item, "video")
 
     seen_urls: set[str] = set()
     if post_cover:
@@ -317,7 +540,13 @@ def primary_media(data: dict[str, Any], source: str) -> dict[str, str]:
         for index, image in enumerate(images, start=1):
             if not isinstance(image, dict):
                 continue
-            image_url = first_url(image.get("original"), image.get("url"))
+            image_url = first_url(
+                image.get("original"),
+                image.get("url"),
+                image.get("urlDefault"),
+                image.get("urlPre"),
+                image.get("infoList"),
+            )
             if not image_url or image_url in seen_urls:
                 continue
             result[f"image_{index:02d}"] = image_url
@@ -348,6 +577,8 @@ def infer_note_type(source: str) -> str | None:
     query_type = urllib.parse.parse_qs(parsed.query).get("type", [""])[0].lower()
     if query_type in {"video", "image"}:
         return query_type
+    if query_type in {"normal", "note"}:
+        return "image"
     if "type=video" in source.lower():
         return "video"
     return None
@@ -437,7 +668,36 @@ def extract_audio_file(
     return target
 
 
-def download_url(url: str, target_dir: Path, index: int, timeout: int, base_name: str = "") -> Path:
+def download_url(
+    url: str,
+    target_dir: Path,
+    index: int,
+    timeout: int,
+    base_name: str = "",
+    retries: int = 0,
+    limiter: DownloadRateLimiter | None = None,
+) -> Path:
+    last_error: Exception | None = None
+    for attempt in range(retries + 1):
+        try:
+            return download_url_once(url, target_dir, index, timeout, base_name, limiter)
+        except Exception as exc:  # noqa: BLE001
+            last_error = exc
+            if attempt < retries:
+                time.sleep(1.5 * (attempt + 1))
+    raise last_error or CollectError("download failed")
+
+
+def download_url_once(
+    url: str,
+    target_dir: Path,
+    index: int,
+    timeout: int,
+    base_name: str = "",
+    limiter: DownloadRateLimiter | None = None,
+) -> Path:
+    if limiter:
+        limiter.wait()
     headers = {"User-Agent": "Mozilla/5.0"}
     req = urllib.request.Request(url, headers=headers)
     with urllib.request.urlopen(req, timeout=timeout) as response:
@@ -445,16 +705,52 @@ def download_url(url: str, target_dir: Path, index: int, timeout: int, base_name
         ext = guess_extension(url, content_type)
         prefix = f"{base_name}-" if base_name else ""
         target = target_dir / f"{prefix}{index:03d}{ext}"
-        with target.open("wb") as handle:
-            while True:
-                chunk = response.read(1024 * 256)
-                if not chunk:
-                    break
-                handle.write(chunk)
+        temp_target = target.with_name(f"{target.name}.part")
+        try:
+            with temp_target.open("wb") as handle:
+                while True:
+                    chunk = response.read(1024 * 256)
+                    if not chunk:
+                        break
+                    handle.write(chunk)
+            temp_target.replace(target)
+        except Exception:
+            if temp_target.exists():
+                temp_target.unlink()
+            raise
     return target
 
 
-def download_named_url(url: str, target_dir: Path, base_name: str, name: str, timeout: int) -> Path:
+def download_named_url(
+    url: str,
+    target_dir: Path,
+    base_name: str,
+    name: str,
+    timeout: int,
+    retries: int = 0,
+    limiter: DownloadRateLimiter | None = None,
+) -> Path:
+    last_error: Exception | None = None
+    for attempt in range(retries + 1):
+        try:
+            return download_named_url_once(url, target_dir, base_name, name, timeout, limiter)
+        except Exception as exc:  # noqa: BLE001
+            last_error = exc
+            if attempt < retries:
+                time.sleep(1.5 * (attempt + 1))
+    raise last_error or CollectError("download failed")
+
+
+def download_named_url_once(
+    url: str,
+    target_dir: Path,
+    base_name: str,
+    name: str,
+    timeout: int,
+    limiter: DownloadRateLimiter | None = None,
+) -> Path:
+    if limiter:
+        limiter.wait()
     headers = {"User-Agent": "Mozilla/5.0"}
     req = urllib.request.Request(url, headers=headers)
     with urllib.request.urlopen(req, timeout=timeout) as response:
@@ -463,13 +759,66 @@ def download_named_url(url: str, target_dir: Path, base_name: str, name: str, ti
         if name in {"video", "audio"} and ext == ".bin":
             ext = ".mp4"
         target = target_dir / f"{base_name}-{name}{ext}"
-        with target.open("wb") as handle:
-            while True:
-                chunk = response.read(1024 * 256)
-                if not chunk:
-                    break
-                handle.write(chunk)
+        temp_target = target.with_name(f"{target.name}.part")
+        try:
+            with temp_target.open("wb") as handle:
+                while True:
+                    chunk = response.read(1024 * 256)
+                    if not chunk:
+                        break
+                    handle.write(chunk)
+            temp_target.replace(target)
+        except Exception:
+            if temp_target.exists():
+                temp_target.unlink()
+            raise
     return target
+
+
+def download_named_media(task: tuple[str, str, Path, str, int, int, DownloadRateLimiter | None]) -> dict[str, Any]:
+    name, url, target_dir, base_name, timeout, retries, limiter = task
+    try:
+        media_path = download_named_url(url, target_dir, base_name, name, timeout, retries, limiter)
+        return {"ok": True, "name": name, "url": url, "path": str(media_path)}
+    except Exception as exc:  # noqa: BLE001
+        return {"ok": False, "name": name, "url": url, "error": str(exc)}
+
+
+def download_indexed_media(task: tuple[int, str, Path, str, int, int, DownloadRateLimiter | None]) -> dict[str, Any]:
+    index, url, target_dir, base_name, timeout, retries, limiter = task
+    name = f"{index:03d}"
+    try:
+        media_path = download_url(url, target_dir, index, timeout, base_name, retries, limiter)
+        return {"ok": True, "name": name, "url": url, "path": str(media_path)}
+    except Exception as exc:  # noqa: BLE001
+        return {"ok": False, "name": name, "url": url, "error": str(exc)}
+
+
+def local_media_keys(primary: dict[str, str], media_dir: Path) -> set[str]:
+    keys: set[str] = set()
+    if not media_dir.exists():
+        return keys
+    files = [path for path in media_dir.iterdir() if path.is_file() and path.stat().st_size > 0]
+    for key in primary:
+        token = f"-{key}."
+        if any(token in path.name for path in files):
+            keys.add(key)
+    return keys
+
+
+def media_completion(primary: dict[str, str], media_dir: Path, media_errors: list[dict[str, str]]) -> dict[str, Any]:
+    expected = list(primary.keys())
+    present = sorted(local_media_keys(primary, media_dir))
+    missing = [key for key in expected if key not in present]
+    missing_set = set(missing)
+    blocking_errors = [error for error in media_errors if error.get("name") in missing_set]
+    return {
+        "complete": not missing,
+        "expected": expected,
+        "present": present,
+        "missing": missing,
+        "blocking_errors": blocking_errors,
+    }
 
 
 def call_note_api(
@@ -481,25 +830,36 @@ def call_note_api(
     retries: int,
     fallback: bool,
 ) -> tuple[str, dict[str, Any]]:
-    note_id = extract_note_id(source)
-    params = {"note_id": note_id} if note_id else {"share_text": source}
+    resolved_source = resolve_xhs_short_link(source, timeout) or source
+    note_id = extract_note_id(resolved_source) or extract_note_id(source)
+    xsec_token = extract_xsec_token(resolved_source) or extract_xsec_token(source)
+    params_source = resolved_source if resolved_source != source else source
+    params = {"note_id": note_id} if note_id else {"share_text": params_source}
 
-    inferred_type = infer_note_type(source)
+    inferred_type = type_from_url(resolved_source) or infer_note_type(source)
     if note_type == "auto" and inferred_type == "video":
-        order = ["video", "image"]
+        order = ["video"]
+    elif note_type == "auto" and inferred_type == "image":
+        order = ["image"]
     elif note_type == "auto":
-        order = ["image", "video"]
+        order = ["web_v3"] if note_id and xsec_token else ["app_v1"]
     else:
         order = [note_type]
-    if fallback and "app_v1" not in order:
+    if fallback and note_type != "auto" and "app_v1" not in order:
         order.append("app_v1")
 
     errors: list[str] = []
     for endpoint_name in order:
         path = API_PATHS[endpoint_name]
         url = base_url.rstrip("/") + path
+        endpoint_params = dict(params)
+        if endpoint_name == "web_v3":
+            if not note_id or not xsec_token:
+                errors.append("web_v3: note_id and xsec_token are required")
+                continue
+            endpoint_params = {"note_id": note_id, "xsec_token": xsec_token}
         try:
-            data = request_json(url, token, params, timeout=timeout, retries=retries)
+            data = request_json(url, token, endpoint_params, timeout=timeout, retries=retries)
         except CollectError as exc:
             errors.append(f"{endpoint_name}: {exc}")
             continue
@@ -521,7 +881,7 @@ def parse_args() -> argparse.Namespace:
         "--type",
         choices=["auto", "image", "video"],
         default="auto",
-        help="Note type. auto tries image first, then video.",
+        help="Note type. auto uses URL type hints or the unified Web V3 detail endpoint.",
     )
     parser.add_argument(
         "--out",
@@ -558,6 +918,8 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--timeout", type=int, default=30)
     parser.add_argument("--retries", type=int, default=1)
+    parser.add_argument("--media-workers", type=int, default=4, help="Parallel media download workers.")
+    parser.add_argument("--media-qps", type=float, default=10.0, help="Maximum media download requests per second.")
     return parser.parse_args()
 
 
@@ -615,13 +977,22 @@ def main() -> int:
     if args.download_media and primary:
         media_dir = note_dir / "media"
         media_dir.mkdir(exist_ok=True)
-        for name, url in primary.items():
-            try:
-                media_path = download_named_url(url, media_dir, slug, name, args.timeout)
+        limiter = DownloadRateLimiter(args.media_qps)
+        tasks = [
+            (name, url, media_dir, slug, args.timeout, args.retries, limiter)
+            for name, url in primary.items()
+        ]
+        with ThreadPoolExecutor(max_workers=max(1, args.media_workers)) as pool:
+            results = list(pool.map(download_named_media, tasks))
+        for result in results:
+            name = result["name"]
+            url = result["url"]
+            if result["ok"]:
+                media_path = Path(result["path"])
                 downloaded.append({"name": name, "url": url, "path": str(media_path)})
-            except Exception as exc:  # noqa: BLE001 - keep the rest of the downloads moving
-                print(f"Media download failed: {url} ({exc})", file=sys.stderr)
-                media_errors.append({"name": name, "url": url, "error": str(exc)})
+            else:
+                print(f"Media download failed: {url} ({result['error']})", file=sys.stderr)
+                media_errors.append({"name": name, "url": url, "error": result["error"]})
                 continue
             if not args.no_extract_audio and can_extract_audio(media_path):
                 try:
@@ -650,13 +1021,22 @@ def main() -> int:
     elif args.download_media and media_urls:
         media_dir = note_dir / "media"
         media_dir.mkdir(exist_ok=True)
-        for index, url in enumerate(media_urls, start=1):
-            try:
-                media_path = download_url(url, media_dir, index, args.timeout, slug)
-                downloaded.append({"name": f"{index:03d}", "url": url, "path": str(media_path)})
-            except Exception as exc:  # noqa: BLE001 - keep the rest of the downloads moving
-                print(f"Media download failed: {url} ({exc})", file=sys.stderr)
-                media_errors.append({"name": f"{index:03d}", "url": url, "error": str(exc)})
+        limiter = DownloadRateLimiter(args.media_qps)
+        tasks = [
+            (index, url, media_dir, slug, args.timeout, args.retries, limiter)
+            for index, url in enumerate(media_urls, start=1)
+        ]
+        with ThreadPoolExecutor(max_workers=max(1, args.media_workers)) as pool:
+            results = list(pool.map(download_indexed_media, tasks))
+        for result in results:
+            name = result["name"]
+            url = result["url"]
+            if result["ok"]:
+                media_path = Path(result["path"])
+                downloaded.append({"name": name, "url": url, "path": str(media_path)})
+            else:
+                print(f"Media download failed: {url} ({result['error']})", file=sys.stderr)
+                media_errors.append({"name": name, "url": url, "error": result["error"]})
                 continue
             if not args.no_extract_audio and can_extract_audio(media_path):
                 try:
@@ -670,7 +1050,7 @@ def main() -> int:
                     )
                     extracted_audio.append(
                         {
-                            "source_name": f"{index:03d}",
+                            "source_name": name,
                             "source_path": str(media_path),
                             "path": str(audio_path),
                             "format": "mp3",
@@ -681,9 +1061,16 @@ def main() -> int:
                     )
                 except Exception as exc:  # noqa: BLE001
                     print(f"Audio extraction failed: {media_path} ({exc})", file=sys.stderr)
-                    audio_errors.append({"name": f"{index:03d}", "path": str(media_path), "error": str(exc)})
+                    audio_errors.append({"name": name, "path": str(media_path), "error": str(exc)})
 
     local_media_path: Path | None = None
+    completion = media_completion(primary, note_dir / "media", media_errors) if args.download_media else {
+        "complete": not bool(primary),
+        "expected": list(primary.keys()),
+        "present": [],
+        "missing": [],
+        "blocking_errors": [],
+    }
     if args.download_media:
         local_media_path = note_dir / f"{slug}-local_media.json"
         local_media_path.write_text(
@@ -693,6 +1080,11 @@ def main() -> int:
                     "extracted_audio": extracted_audio,
                     "media_errors": media_errors,
                     "audio_errors": audio_errors,
+                    "media_complete": completion["complete"],
+                    "expected_media": completion["expected"],
+                    "present_media": completion["present"],
+                    "missing_media": completion["missing"],
+                    "blocking_errors": completion["blocking_errors"],
                 },
                 ensure_ascii=False,
                 indent=2,
@@ -700,6 +1092,8 @@ def main() -> int:
             encoding="utf-8",
         )
         summary_data["local_media"] = str(local_media_path)
+        summary_data["media_complete"] = completion["complete"]
+        summary_data["missing_media"] = completion["missing"]
     if extracted_audio:
         summary_data["local_audio"] = extracted_audio[0]["path"]
     if args.download_media or extracted_audio:
@@ -715,6 +1109,8 @@ def main() -> int:
         "media_urls": len(media_urls),
         "downloaded_media": len(downloaded),
         "extracted_audio": len(extracted_audio),
+        "media_complete": completion["complete"],
+        "missing_media": completion["missing"],
     }
     if local_media_path:
         result["local_media"] = str(local_media_path)

@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+from concurrent.futures import ThreadPoolExecutor
 import hashlib
 import json
 import mimetypes
@@ -13,6 +14,7 @@ import shutil
 import sys
 import subprocess
 import time
+import threading
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -23,6 +25,12 @@ from typing import Any
 
 DEFAULT_BASE_URL = "https://api.tikhub.io"
 DEFAULT_OUTPUT_DIR = Path(__file__).resolve().parents[1] / "采集文件夹"
+SHORT_LINK_USER_AGENTS = [
+    "douyin-tikhub-collector/1.0",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36",
+    "Mozilla/5.0 (Linux; Android 14; Pixel 7) AppleWebKit/537.36 Chrome/124.0 Mobile Safari/537.36",
+    "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 Mobile/15E148",
+]
 API_PATHS = {
     "share": "/api/v1/douyin/app/v3/fetch_one_video_by_share_url",
     "aweme": "/api/v1/douyin/app/v3/fetch_one_video_v3",
@@ -73,6 +81,25 @@ AUDIO_SOURCE_EXTENSIONS = {
     ".mkv",
     ".flv",
 }
+
+
+class DownloadRateLimiter:
+    def __init__(self, qps: float) -> None:
+        self.min_interval = 1.0 / qps if qps and qps > 0 else 0.0
+        self._lock = threading.Lock()
+        self._next_allowed = 0.0
+
+    def wait(self) -> None:
+        if self.min_interval <= 0:
+            return
+        while True:
+            with self._lock:
+                now = time.monotonic()
+                wait_time = self._next_allowed - now
+                if wait_time <= 0:
+                    self._next_allowed = now + self.min_interval
+                    return
+            time.sleep(min(wait_time, self.min_interval))
 
 
 class CollectError(RuntimeError):
@@ -176,6 +203,7 @@ def find_first_by_keys(value: Any, keys: set[str]) -> Any:
 
 def extract_aweme_id(source: str) -> str | None:
     patterns = [
+        r"(?:modal_id)=([0-9]{10,30})",
         r"(?:aweme_id|awemeId|item_id|itemId)=([0-9]{10,30})",
         r"/video/([0-9]{10,30})",
         r"/note/([0-9]{10,30})",
@@ -185,6 +213,51 @@ def extract_aweme_id(source: str) -> str | None:
         match = re.search(pattern, source)
         if match:
             return match.group(1)
+    return None
+
+
+def extract_first_url(source: str) -> str | None:
+    match = re.search(r"https?://[^\s\"'<>\)\]]+", source)
+    if not match:
+        return None
+    return match.group(0).rstrip(".,;，。")
+
+
+def resolve_douyin_short_link(source: str, timeout: int) -> str | None:
+    raw_url = extract_first_url(source)
+    if not raw_url:
+        return None
+    parsed = urllib.parse.urlparse(raw_url)
+    host = parsed.netloc.lower()
+    if "v.douyin.com" not in host:
+        return raw_url
+
+    for user_agent in SHORT_LINK_USER_AGENTS:
+        headers = {
+            "User-Agent": user_agent,
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+            "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
+        }
+        req = urllib.request.Request(raw_url, headers=headers)
+        try:
+            with urllib.request.urlopen(req, timeout=min(timeout, 15)) as response:
+                final_url = response.geturl()
+        except Exception:
+            continue
+        final_host = urllib.parse.urlparse(final_url).netloc.lower()
+        if "douyin.com" in final_host or "iesdouyin.com" in final_host:
+            return final_url
+    return None
+
+
+def content_type_from_url(url: str | None) -> str | None:
+    if not url:
+        return None
+    path = urllib.parse.urlparse(url).path.lower()
+    if "/note/" in path:
+        return "image"
+    if "/video/" in path:
+        return "video"
     return None
 
 
@@ -263,10 +336,13 @@ def summarize(data: dict[str, Any], endpoint: str, source: str) -> dict[str, Any
     item = find_aweme_item(data, source) or {}
     author = item.get("author") if isinstance(item.get("author"), dict) else {}
     statistics = item.get("statistics") if isinstance(item.get("statistics"), dict) else {}
+    images = item.get("images") if isinstance(item.get("images"), list) else []
+    note_type = "image" if images else "video"
     summary = {
         "collected_at": datetime.now().isoformat(timespec="seconds"),
         "source": source,
         "endpoint": endpoint,
+        "note_type": note_type,
     }
 
     fields = {
@@ -445,7 +521,36 @@ def extract_audio_file(
     return target
 
 
-def download_named_url(url: str, target_dir: Path, base_name: str, name: str, timeout: int) -> Path:
+def download_named_url(
+    url: str,
+    target_dir: Path,
+    base_name: str,
+    name: str,
+    timeout: int,
+    retries: int = 0,
+    limiter: DownloadRateLimiter | None = None,
+) -> Path:
+    last_error: Exception | None = None
+    for attempt in range(retries + 1):
+        try:
+            return download_named_url_once(url, target_dir, base_name, name, timeout, limiter)
+        except Exception as exc:  # noqa: BLE001
+            last_error = exc
+            if attempt < retries:
+                time.sleep(1.5 * (attempt + 1))
+    raise last_error or CollectError("download failed")
+
+
+def download_named_url_once(
+    url: str,
+    target_dir: Path,
+    base_name: str,
+    name: str,
+    timeout: int,
+    limiter: DownloadRateLimiter | None = None,
+) -> Path:
+    if limiter:
+        limiter.wait()
     headers = {"User-Agent": "Mozilla/5.0"}
     req = urllib.request.Request(url, headers=headers)
     with urllib.request.urlopen(req, timeout=timeout) as response:
@@ -453,13 +558,56 @@ def download_named_url(url: str, target_dir: Path, base_name: str, name: str, ti
         if name in {"video", "audio"} and ext == ".bin":
             ext = ".mp4"
         target = target_dir / f"{base_name}-{name}{ext}"
-        with target.open("wb") as handle:
-            while True:
-                chunk = response.read(1024 * 256)
-                if not chunk:
-                    break
-                handle.write(chunk)
+        temp_target = target.with_name(f"{target.name}.part")
+        try:
+            with temp_target.open("wb") as handle:
+                while True:
+                    chunk = response.read(1024 * 256)
+                    if not chunk:
+                        break
+                    handle.write(chunk)
+            temp_target.replace(target)
+        except Exception:
+            if temp_target.exists():
+                temp_target.unlink()
+            raise
     return target
+
+
+def download_named_media(task: tuple[str, str, Path, str, int, int, DownloadRateLimiter | None]) -> dict[str, Any]:
+    name, url, target_dir, base_name, timeout, retries, limiter = task
+    try:
+        media_path = download_named_url(url, target_dir, base_name, name, timeout, retries, limiter)
+        return {"ok": True, "name": name, "url": url, "path": str(media_path)}
+    except Exception as exc:  # noqa: BLE001
+        return {"ok": False, "name": name, "url": url, "error": str(exc)}
+
+
+def local_media_keys(primary: dict[str, str], media_dir: Path) -> set[str]:
+    keys: set[str] = set()
+    if not media_dir.exists():
+        return keys
+    files = [path for path in media_dir.iterdir() if path.is_file() and path.stat().st_size > 0]
+    for key in primary:
+        token = f"-{key}."
+        if any(token in path.name for path in files):
+            keys.add(key)
+    return keys
+
+
+def media_completion(primary: dict[str, str], media_dir: Path, media_errors: list[dict[str, str]]) -> dict[str, Any]:
+    expected = list(primary.keys())
+    present = sorted(local_media_keys(primary, media_dir))
+    missing = [key for key in expected if key not in present]
+    missing_set = set(missing)
+    blocking_errors = [error for error in media_errors if error.get("name") in missing_set]
+    return {
+        "complete": not missing,
+        "expected": expected,
+        "present": present,
+        "missing": missing,
+        "blocking_errors": blocking_errors,
+    }
 
 
 def call_video_api(
@@ -470,13 +618,13 @@ def call_video_api(
     retries: int,
     use_quality: bool,
 ) -> tuple[str, dict[str, Any]]:
-    aweme_id = extract_aweme_id(source)
-    if aweme_id and not source.startswith(("http://", "https://")):
+    resolved_source = resolve_douyin_short_link(source, timeout) or source
+    aweme_id = extract_aweme_id(resolved_source) or extract_aweme_id(source)
+    first_url = extract_first_url(resolved_source)
+    if aweme_id:
         order = [("aweme", {"aweme_id": aweme_id})]
-    elif aweme_id:
-        order = [("share", {"share_url": source}), ("aweme", {"aweme_id": aweme_id})]
     else:
-        order = [("share", {"share_url": source})]
+        order = [("share", {"share_url": first_url or source})]
     if use_quality:
         if not aweme_id:
             raise CollectError("--highest-quality requires an aweme_id in the input or URL")
@@ -524,6 +672,8 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--timeout", type=int, default=30)
     parser.add_argument("--retries", type=int, default=1)
+    parser.add_argument("--media-workers", type=int, default=4, help="Parallel media download workers.")
+    parser.add_argument("--media-qps", type=float, default=10.0, help="Maximum media download requests per second.")
     return parser.parse_args()
 
 
@@ -576,13 +726,22 @@ def main() -> int:
     if args.download_media and primary:
         media_dir = item_dir / "media"
         media_dir.mkdir(exist_ok=True)
-        for name, url in primary.items():
-            try:
-                media_path = download_named_url(url, media_dir, slug, name, args.timeout)
+        limiter = DownloadRateLimiter(args.media_qps)
+        tasks = [
+            (name, url, media_dir, slug, args.timeout, args.retries, limiter)
+            for name, url in primary.items()
+        ]
+        with ThreadPoolExecutor(max_workers=max(1, args.media_workers)) as pool:
+            results = list(pool.map(download_named_media, tasks))
+        for result in results:
+            name = result["name"]
+            url = result["url"]
+            if result["ok"]:
+                media_path = Path(result["path"])
                 downloaded.append({"name": name, "url": url, "path": str(media_path)})
-            except Exception as exc:  # noqa: BLE001
-                print(f"Media download failed: {url} ({exc})", file=sys.stderr)
-                media_errors.append({"name": name, "url": url, "error": str(exc)})
+            else:
+                print(f"Media download failed: {url} ({result['error']})", file=sys.stderr)
+                media_errors.append({"name": name, "url": url, "error": result["error"]})
                 continue
             if not args.no_extract_audio and can_extract_audio(media_path):
                 try:
@@ -610,6 +769,13 @@ def main() -> int:
                     audio_errors.append({"name": name, "path": str(media_path), "error": str(exc)})
 
     local_media_path: Path | None = None
+    completion = media_completion(primary, item_dir / "media", media_errors) if args.download_media else {
+        "complete": not bool(primary),
+        "expected": list(primary.keys()),
+        "present": [],
+        "missing": [],
+        "blocking_errors": [],
+    }
     if args.download_media:
         local_media_path = item_dir / f"{slug}-local_media.json"
         local_media_path.write_text(
@@ -619,6 +785,11 @@ def main() -> int:
                     "extracted_audio": extracted_audio,
                     "media_errors": media_errors,
                     "audio_errors": audio_errors,
+                    "media_complete": completion["complete"],
+                    "expected_media": completion["expected"],
+                    "present_media": completion["present"],
+                    "missing_media": completion["missing"],
+                    "blocking_errors": completion["blocking_errors"],
                 },
                 ensure_ascii=False,
                 indent=2,
@@ -626,6 +797,8 @@ def main() -> int:
             encoding="utf-8",
         )
         summary_data["local_media"] = str(local_media_path)
+        summary_data["media_complete"] = completion["complete"]
+        summary_data["missing_media"] = completion["missing"]
     if extracted_audio:
         summary_data["local_audio"] = extracted_audio[0]["path"]
     if args.download_media or extracted_audio:
@@ -641,6 +814,8 @@ def main() -> int:
         "media_urls": len(media_urls),
         "downloaded_media": len(downloaded),
         "extracted_audio": len(extracted_audio),
+        "media_complete": completion["complete"],
+        "missing_media": completion["missing"],
     }
     if local_media_path:
         result["local_media"] = str(local_media_path)
