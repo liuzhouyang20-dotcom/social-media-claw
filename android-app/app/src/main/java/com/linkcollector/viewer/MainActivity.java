@@ -4,6 +4,8 @@ import android.app.Activity;
 import android.app.AlertDialog;
 import android.app.DownloadManager;
 import android.content.BroadcastReceiver;
+import android.content.ClipData;
+import android.content.ClipboardManager;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
@@ -80,7 +82,7 @@ public class MainActivity extends Activity {
     private static final String KEY_BASE_URL = "base_url";
     private static final String KEY_USERNAME = "username";
     private static final String KEY_PASSWORD = "password";
-    private static final String DEFAULT_BASE_URL = "http://49.51.72.63";
+    private static final String DEFAULT_BASE_URL = "http://49.51.72.63:8910";
     private static final String DEFAULT_USERNAME = "your-username";
     private static final int COLLECT_POLL_INTERVAL_MS = 3000;
     private static final String[] HOME_FILTERS = {"all", "xhs", "douyin", "image", "video"};
@@ -136,6 +138,7 @@ public class MainActivity extends Activity {
     private TextView searchStatus;
     private LinearLayout searchTabs;
     private LinearLayout searchFilterPanel;
+    private String searchEntryMode = "post";
     private View detailView;
     private VideoView detailVideoView;
     private SharedPreferences preferences;
@@ -144,6 +147,8 @@ public class MainActivity extends Activity {
     private String username;
     private String password;
     private String pendingSharedText;
+    private String lastClipboardPromptText = "";
+    private boolean clipboardPromptShowing;
     private String activeView = "home";
     private String activeHomeFilter = "all";
     private int statusBarInset;
@@ -185,6 +190,14 @@ public class MainActivity extends Activity {
         String sharedText = extractSharedText(intent);
         if (sharedText != null && !sharedText.trim().isEmpty()) {
             collectSharedText(sharedText);
+        }
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        if (appShell != null && appShell.getVisibility() == View.VISIBLE && !forceUpdateRequired) {
+            mainHandler.postDelayed(this::checkClipboardForCollectLink, 300);
         }
     }
 
@@ -296,7 +309,7 @@ public class MainActivity extends Activity {
         row.addView(tabs, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1));
 
         ImageButton searchButton = createIconButton(com.linkcollector.viewer.R.drawable.ic_antd_search_outlined, "搜索");
-        searchButton.setOnClickListener(view -> showSearch(""));
+        searchButton.setVisibility(View.INVISIBLE);
         row.addView(searchButton, new LinearLayout.LayoutParams(dp(46), LinearLayout.LayoutParams.MATCH_PARENT));
 
         View line = new View(this);
@@ -563,6 +576,8 @@ public class MainActivity extends Activity {
             String text = pendingSharedText;
             pendingSharedText = null;
             collectSharedText(text);
+        } else {
+            mainHandler.postDelayed(this::checkClipboardForCollectLink, 400);
         }
     }
 
@@ -908,7 +923,7 @@ public class MainActivity extends Activity {
 
         searchInput = new EditText(this);
         searchInput.setText(query);
-        searchInput.setHint("搜索小红书 / 抖音作品");
+        searchInput.setHint(searchEntryMode.equals("author") ? "搜索作者昵称" : "搜索帖子标题 / 正文 / 作者");
         searchInput.setSingleLine(true);
         searchInput.setTextSize(17);
         searchInput.setTextColor(0xFF222222);
@@ -1310,189 +1325,6 @@ public class MainActivity extends Activity {
         return card;
     }
 
-    private void performSearch(boolean fromCacheOnly) {
-        activeSearchCacheId = "";
-        searchNextPage = null;
-        searchHasMore = false;
-        loadingMoreSearch = false;
-        performSearchRequest(false);
-    }
-
-    private void performSearchRequest(boolean append) {
-        String keyword = searchInput == null ? "" : searchInput.getText().toString().trim();
-        if (keyword.isEmpty()) {
-            Toast.makeText(this, "请输入关键词", Toast.LENGTH_SHORT).show();
-            return;
-        }
-        if (append && (!searchHasMore || loadingMoreSearch || searchingRemote || activeSearchCacheId.isEmpty())) return;
-        if (append) loadingMoreSearch = true;
-        else searchingRemote = true;
-        renderSearchBody(true);
-        executor.execute(() -> {
-            try {
-                JSONObject payload = new JSONObject();
-                payload.put("keyword", keyword);
-                payload.put("platform", searchPlatform);
-                payload.put("contentType", searchContentType);
-                payload.put("sort", searchSort);
-                payload.put("publishTime", searchPublishTime);
-                payload.put("duration", searchDuration);
-                payload.put("page", 1);
-                if (append) {
-                    payload.put("appendTo", activeSearchCacheId);
-                    if (searchNextPage != null) payload.put("pageState", searchNextPage);
-                }
-                JSONObject response = postJson(baseUrl + "/api/search", payload);
-                if (!response.optBoolean("ok")) throw new RuntimeException(response.optString("error", "搜索失败"));
-                List<FeedItem> next = parseFeedItems(append ? response.optJSONArray("pageItems") : response.optJSONArray("items"));
-                JSONObject record = response.optJSONObject("record");
-                JSONObject nextPage = response.optJSONObject("nextPage");
-                mainHandler.post(() -> {
-                    if (append) {
-                        appendSearchItems(next);
-                    } else {
-                        searchItems.clear();
-                        searchItems.addAll(next);
-                    }
-                    if (record != null) activeSearchCacheId = record.optString("id", activeSearchCacheId);
-                    searchNextPage = nextPage;
-                    searchHasMore = nextPage != null && nextPage.optBoolean("hasMore", false);
-                    searchingRemote = false;
-                    loadingMoreSearch = false;
-                    renderSearchBody(true);
-                    loadSearchHistory();
-                });
-            } catch (Exception exception) {
-                mainHandler.post(() -> {
-                    searchingRemote = false;
-                    loadingMoreSearch = false;
-                    renderSearchBody(true);
-                    Toast.makeText(this, exception.getMessage() == null ? "搜索失败" : exception.getMessage(), Toast.LENGTH_LONG).show();
-                });
-            }
-        });
-    }
-
-    private void loadMoreSearchResults() {
-        performSearchRequest(true);
-    }
-
-    private void appendSearchItems(List<FeedItem> next) {
-        Map<String, Boolean> seen = new HashMap<>();
-        for (FeedItem item : searchItems) {
-            seen.put(item.platform + ":" + item.source + ":" + item.title, true);
-        }
-        for (FeedItem item : next) {
-            String key = item.platform + ":" + item.source + ":" + item.title;
-            if (seen.containsKey(key)) continue;
-            seen.put(key, true);
-            searchItems.add(item);
-        }
-    }
-
-    private List<FeedItem> parseFeedItems(JSONArray array) {
-        List<FeedItem> next = new ArrayList<>();
-        if (array == null) return next;
-        for (int i = 0; i < array.length(); i++) {
-            next.add(FeedItem.fromJson(array.optJSONObject(i)));
-        }
-        return next;
-    }
-
-    private void loadSearchHistory() {
-        if (baseUrl == null || baseUrl.trim().isEmpty()) return;
-        executor.execute(() -> {
-            try {
-                JSONObject response = getJson(baseUrl + "/api/search-history?platform=" + encodeParam(searchPlatform));
-                JSONArray array = response.optJSONArray("history");
-                List<SearchHistoryItem> next = new ArrayList<>();
-                if (array != null) {
-                    for (int i = 0; i < array.length(); i++) {
-                        next.add(SearchHistoryItem.fromJson(array.optJSONObject(i)));
-                    }
-                }
-                mainHandler.post(() -> {
-                    searchHistory.clear();
-                    searchHistory.addAll(next);
-                    renderSearchHistory();
-                });
-            } catch (Exception ignored) {
-            }
-        });
-    }
-
-    private void loadSearchTrending() {
-        if (!searchTerms.isEmpty()) return;
-        executor.execute(() -> {
-            List<String> next = new ArrayList<>();
-            try {
-                JSONObject response = getJson(baseUrl + "/api/search-trending");
-                JSONArray array = response.optJSONArray("terms");
-                if (array != null) {
-                    for (int i = 0; i < array.length(); i++) next.add(array.optString(i));
-                }
-            } catch (Exception ignored) {
-            }
-            if (next.isEmpty()) {
-                next.add("codex");
-                next.add("AI 工作流");
-                next.add("小红书运营");
-                next.add("抖音热门视频");
-            }
-            mainHandler.post(() -> {
-                searchTerms.clear();
-                searchTerms.addAll(next);
-                if ("search".equals(activeView) && searchItems.isEmpty()) renderSearchBody(false);
-            });
-        });
-    }
-
-    private void openCachedSearch(SearchHistoryItem item) {
-        searchInput.setText(item.keyword);
-        searchPlatform = item.platform;
-        if (searchPlatformButton != null) searchPlatformButton.setText(searchPlatformLabel());
-        searchingRemote = true;
-        renderSearchBody(true);
-        executor.execute(() -> {
-            try {
-                JSONObject response = getJson(baseUrl + "/api/search-result?id=" + encodeParam(item.id));
-                if (!response.optBoolean("ok")) throw new RuntimeException(response.optString("error", "缓存读取失败"));
-                List<FeedItem> next = parseFeedItems(response.optJSONArray("items"));
-                JSONObject record = response.optJSONObject("record");
-                JSONObject nextPage = response.optJSONObject("nextPage");
-                mainHandler.post(() -> {
-                    searchItems.clear();
-                    searchItems.addAll(next);
-                    activeSearchCacheId = record == null ? item.id : record.optString("id", item.id);
-                    searchNextPage = nextPage;
-                    searchHasMore = nextPage != null && nextPage.optBoolean("hasMore", false);
-                    searchingRemote = false;
-                    renderSearchBody(true);
-                });
-            } catch (Exception exception) {
-                mainHandler.post(() -> {
-                    searchingRemote = false;
-                    searchHasMore = false;
-                    searchNextPage = null;
-                    renderSearchBody(false);
-                    Toast.makeText(this, exception.getMessage() == null ? "缓存已过期" : exception.getMessage(), Toast.LENGTH_LONG).show();
-                });
-            }
-        });
-    }
-
-    private void deleteSearchHistory(String id) {
-        executor.execute(() -> {
-            try {
-                String target = baseUrl + "/api/search-history" + (id == null || id.isEmpty() ? "" : "?id=" + encodeParam(id));
-                deleteJson(target);
-                mainHandler.post(this::loadSearchHistory);
-            } catch (Exception exception) {
-                mainHandler.post(() -> Toast.makeText(this, "删除失败", Toast.LENGTH_SHORT).show());
-            }
-        });
-    }
-
     private void collectSearchResult(FeedItem item) {
         if (item.source == null || item.source.trim().isEmpty()) {
             Toast.makeText(this, "该结果暂不能采集", Toast.LENGTH_SHORT).show();
@@ -1512,6 +1344,153 @@ public class MainActivity extends Activity {
                 mainHandler.post(() -> Toast.makeText(this, exception.getMessage() == null ? "采集失败" : exception.getMessage(), Toast.LENGTH_LONG).show());
             }
         });
+    }
+
+    private void performSearch(boolean fromCacheOnly) {
+        activeSearchCacheId = "";
+        searchNextPage = null;
+        searchHasMore = false;
+        loadingMoreSearch = false;
+        performLocalCollectSearch(false);
+    }
+
+    private void performSearchRequest(boolean append) {
+        performLocalCollectSearch(append);
+    }
+
+    private void performLocalCollectSearch(boolean append) {
+        String keyword = searchInput == null ? "" : searchInput.getText().toString().trim();
+        if (keyword.isEmpty()) {
+            Toast.makeText(this, "请输入关键词", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        if (searchingRemote) return;
+        searchingRemote = true;
+        if (!append) {
+            searchItems.clear();
+            renderSearchBody(true);
+        }
+        mainHandler.post(() -> {
+            List<FeedItem> matched = new ArrayList<>();
+            String lowerKeyword = keyword.toLowerCase(Locale.ROOT);
+            for (FeedItem item : items) {
+                if (!matchesSearchScope(item)) continue;
+                if (matchesCollectKeyword(item, lowerKeyword)) {
+                    matched.add(item);
+                }
+            }
+            searchItems.clear();
+            searchItems.addAll(matched);
+            searchingRemote = false;
+            searchHasMore = false;
+            loadingMoreSearch = false;
+            renderSearchBody(true);
+        });
+    }
+
+    private boolean matchesCollectKeyword(FeedItem item, String keyword) {
+        if ("author".equals(searchEntryMode)) {
+            return containsIgnoreCase(item.author, keyword);
+        }
+        return containsIgnoreCase(item.title, keyword)
+                || containsIgnoreCase(item.description, keyword)
+                || containsIgnoreCase(item.author, keyword)
+                || containsIgnoreCase(item.source, keyword)
+                || containsIgnoreCase(item.platform, keyword);
+    }
+
+    private boolean matchesSearchScope(FeedItem item) {
+        if ("xhs".equals(searchPlatform) && !"xhs".equals(item.platform)) return false;
+        if ("douyin".equals(searchPlatform) && !"douyin".equals(item.platform)) return false;
+        if ("video".equals(searchContentType) && !item.isVideo) return false;
+        if ("image".equals(searchContentType) && item.isVideo) return false;
+        return true;
+    }
+
+    private boolean containsIgnoreCase(String text, String keyword) {
+        return text != null && keyword != null && text.toLowerCase(Locale.ROOT).contains(keyword);
+    }
+
+    private void loadSearchHistory() {
+        searchHistory.clear();
+        renderSearchHistory();
+    }
+
+    private void loadSearchTrending() {
+        if (!searchTerms.isEmpty()) return;
+        searchTerms.clear();
+        searchTerms.add("小红书");
+        searchTerms.add("抖音");
+        searchTerms.add("AI 工具");
+        searchTerms.add("剪贴板采集");
+        searchTerms.add("博主");
+        searchTerms.add("爆款");
+        searchTerms.add("图文");
+        searchTerms.add("视频");
+        if ("search".equals(activeView) && searchItems.isEmpty()) renderSearchBody(false);
+    }
+
+    private void openCachedSearch(SearchHistoryItem item) {
+        searchInput.setText(item.keyword);
+        searchPlatform = item.platform;
+        if (searchPlatformButton != null) searchPlatformButton.setText(searchPlatformLabel());
+        performSearch(false);
+    }
+
+    private void deleteSearchHistory(String id) {
+        if (id == null || id.isEmpty()) {
+            searchHistory.clear();
+            renderSearchHistory();
+            return;
+        }
+        searchHistory.removeIf(item -> id.equals(item.id));
+        renderSearchHistory();
+    }
+
+    private void loadMoreSearchResults() {
+        return;
+    }
+
+    private void openCollectSearch(String mode) {
+        searchPlatform = "all";
+        searchContentType = "all";
+        searchSort = "general";
+        searchPublishTime = "all";
+        searchDuration = "all";
+        searchFiltersExpanded = false;
+        searchEntryMode = mode;
+        showSearch("");
+        if ("author".equals(mode)) {
+            searchInput.setHint("搜索作者昵称");
+        } else {
+            searchInput.setHint("搜索帖子标题 / 正文 / 作者");
+        }
+        renderSearchBody(false);
+    }
+
+
+    private LinearLayout createCollectSearchButton(String title, String subtitle, int accentColor, View.OnClickListener listener) {
+        LinearLayout button = new LinearLayout(this);
+        button.setOrientation(LinearLayout.VERTICAL);
+        button.setPadding(dp(14), dp(12), dp(14), dp(12));
+        button.setBackground(cardBackground(12, 0xFFF9F9F9, 0x14000000));
+        button.setOnClickListener(listener);
+
+        TextView titleView = new TextView(this);
+        titleView.setText(title);
+        titleView.setTextSize(18);
+        titleView.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+        titleView.setTextColor(accentColor);
+        button.addView(titleView);
+
+        TextView subtitleView = new TextView(this);
+        subtitleView.setText(subtitle);
+        subtitleView.setTextSize(12);
+        subtitleView.setTextColor(0xFF8A8A8A);
+        subtitleView.setPadding(0, dp(4), 0, 0);
+        button.addView(subtitleView);
+
+        return button;
     }
 
     private String encodeParam(String value) throws Exception {
@@ -1537,14 +1516,28 @@ public class MainActivity extends Activity {
         container.setPadding(dp(18), statusBarInset + dp(18), dp(18), dp(112));
         scrollView.addView(container);
 
+        LinearLayout searchGrid = new LinearLayout(this);
+        searchGrid.setOrientation(LinearLayout.HORIZONTAL);
+        searchGrid.setPadding(0, 0, 0, 0);
+        container.addView(searchGrid, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(72)));
+
+        searchGrid.addView(createCollectSearchButton("搜帖子", "按内容、标题、正文搜索", 0xFFFF2442, view -> openCollectSearch("post")), new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1));
+        LinearLayout.LayoutParams searchGridGap = new LinearLayout.LayoutParams(dp(12), LinearLayout.LayoutParams.MATCH_PARENT);
+        View gap = new View(this);
+        gap.setBackgroundColor(0x00000000);
+        searchGrid.addView(gap, searchGridGap);
+        searchGrid.addView(createCollectSearchButton("搜作者", "按作者昵称搜索", 0xFF111111, view -> openCollectSearch("author")), new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1));
+
         LinearLayout hero = new LinearLayout(this);
         hero.setOrientation(LinearLayout.VERTICAL);
         hero.setPadding(dp(18), dp(18), dp(18), dp(20));
         hero.setBackground(cardBackground(10, 0xFFFFFFFF, 0x0F000000));
-        container.addView(hero, new LinearLayout.LayoutParams(
+        LinearLayout.LayoutParams heroParams = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT
-        ));
+        );
+        heroParams.setMargins(0, dp(14), 0, 0);
+        container.addView(hero, heroParams);
 
         LinearLayout titleRow = new LinearLayout(this);
         titleRow.setGravity(Gravity.BOTTOM);
@@ -2430,6 +2423,58 @@ public class MainActivity extends Activity {
         Toast.makeText(this, "已填入分享内容，请确认后采集", Toast.LENGTH_SHORT).show();
     }
 
+    private void checkClipboardForCollectLink() {
+        if (clipboardPromptShowing || password == null || password.trim().isEmpty()) return;
+        if (appShell == null || appShell.getVisibility() != View.VISIBLE || forceUpdateRequired) return;
+        String text = readClipboardText();
+        if (text.isEmpty() || text.equals(lastClipboardPromptText)) return;
+        List<String> sources = extractCollectSources(text);
+        if (sources.isEmpty()) return;
+        lastClipboardPromptText = text;
+        showClipboardCollectPrompt(text, sources);
+    }
+
+    private String readClipboardText() {
+        try {
+            ClipboardManager clipboard = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
+            if (clipboard == null || !clipboard.hasPrimaryClip()) return "";
+            ClipData clipData = clipboard.getPrimaryClip();
+            if (clipData == null || clipData.getItemCount() == 0) return "";
+            CharSequence value = clipData.getItemAt(0).coerceToText(this);
+            return value == null ? "" : value.toString().trim();
+        } catch (Exception ignored) {
+            return "";
+        }
+    }
+
+    private void showClipboardCollectPrompt(String text, List<String> sources) {
+        clipboardPromptShowing = true;
+        String preview = sources.size() == 1 ? sources.get(0) : sources.get(0) + "\n等 " + sources.size() + " 条链接";
+        new AlertDialog.Builder(this)
+                .setTitle("检测到可采集链接")
+                .setMessage("剪贴板里有小红书/抖音链接，是否现在创建采集任务？\n\n" + preview)
+                .setNegativeButton("关闭", (dialog, which) -> clipboardPromptShowing = false)
+                .setPositiveButton("确认采集", (dialog, which) -> {
+                    clipboardPromptShowing = false;
+                    collectFromClipboard(text);
+                })
+                .setOnCancelListener(dialog -> clipboardPromptShowing = false)
+                .show();
+    }
+
+    private void collectFromClipboard(String text) {
+        if (password == null || password.trim().isEmpty()) {
+            pendingSharedText = text;
+            showLogin();
+            return;
+        }
+        showCollect();
+        if (collectSourceInput != null) {
+            collectSourceInput.setText(text);
+            submitCollect();
+        }
+    }
+
     private void login() {
         String nextBaseUrl = normalizeBaseUrl(serverInput.getText().toString());
         String nextUsername = usernameInput.getText().toString().trim();
@@ -2680,6 +2725,9 @@ public class MainActivity extends Activity {
                 connection.setConnectTimeout(15000);
                 connection.setReadTimeout(30000);
                 connection.setRequestProperty("User-Agent", "Mozilla/5.0 LinkCollectorViewer/1.0");
+                if (username != null && password != null) {
+                    connection.setRequestProperty("Authorization", basicAuth(username, password));
+                }
                 byte[] bytes = readBytes(connection.getInputStream());
                 Bitmap bitmap = decodeBitmap(bytes);
                 if (bitmap != null) {
