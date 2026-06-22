@@ -1,48 +1,317 @@
 [
   {
-    "name": "程序员三千-免费使用codex生图、生视频！ #ai #Codex #程序员 #Agnes #计算机",
-    "title": "免费使用codex生图、生视频！ #ai  #Codex  #程序员  #Agnes  #计算机",
-    "platform": "douyin",
-    "contentType": "video",
-    "mediaComplete": false,
-    "expected": [
-      "cover",
-      "dynamic_cover",
-      "video"
-    ],
-    "present": [
-      "cover",
-      "dynamic_cover"
-    ],
-    "missing": [
-      "video"
-    ],
-    "errors": [],
-    "files": [
-      "程序员三千-免费使用codex生图、生视频！ #ai #Codex #程序员 #Agnes #计算机-cover.webp",
-      "程序员三千-免费使用codex生图、生视频！ #ai #Codex #程序员 #Agnes #计算机-dynamic_cover.webp"
-    ]
-  },
-  {
-    "name": "风行体育-亮亮-好奇问一下，大家现在都用Codex搞什么项目？我建了个交流群一起交流。禁止一切广告#Codex#ClaudeCode #Agent #Vibecoding",
-    "title": "好奇问一下，大家现在都用Codex搞什么项目？我建了个交流群一起交流。禁止一切广告#Codex#ClaudeCode #Agent #Vibecoding",
-    "platform": "douyin",
+    "name": "ArchGenAI-Codex新功能炸了！你干活，它看着，然后替",
+    "title": "Codex新功能炸了！你干活，它看着，然后替",
+    "platform": "xhs",
     "contentType": "image",
     "mediaComplete": true,
     "expected": [
+      "author_avatar",
       "cover",
-      "audio"
+      "image_02",
+      "image_03",
+      "image_04",
+      "image_05",
+      "image_06",
+      "image_07",
+      "image_08",
+      "image_09",
+      "image_10",
+      "image_11",
+      "image_12",
+      "image_13",
+      "image_14",
+      "image_15",
+      "image_16",
+      "image_17",
+      "image_18"
     ],
     "present": [
-      "audio",
+      "author_avatar",
+      "cover",
+      "image_02",
+      "image_03",
+      "image_04",
+      "image_05",
+      "image_06",
+      "image_07",
+      "image_08",
+      "image_09",
+      "image_10",
+      "image_11",
+      "image_12",
+      "image_13",
+      "image_14",
+      "image_15",
+      "image_16",
+      "image_17",
+      "image_18"
+    ],
+    "missing": [],
+    "errors": [],
+    "files": [
+      "ArchGenAI-Codex新功能炸了！你干活，它看着，然后替-author_avatar.jpg",
+      "ArchGenAI-Codex新功能炸了！你干活，它看着，然后替-cover.webp",
+      "ArchGenAI-Codex新功能炸了！你干活，它看着，然后替-image_02.webp",
+      "ArchGenAI-Codex新功能炸了！你干活，它看着，然后替-image_03.webp",
+      "ArchGenAI-Codex新功能炸了！你干活，它看着，然后替-image_04.webp",
+      "ArchGenAI-Codex新功能炸了！你干活，它看着，然后替-image_05.webp",
+      "ArchGenAI-Codex新功能炸了！你干活，它看着，然后替-image_06.webp",
+      "ArchGenAI-Codex新功能炸了！你干活，它看着，然后替-image_07.webp",
+      "ArchGenAI-Codex新功能炸了！你干活，它看着，然后替-image_08.webp",
+      "ArchGenAI-Codex新功能炸了！你干活，它看着，然后替-image_09.webp",
+      "ArchGenAI-Codex新功能炸了！你干活，它看着，然后替-image_10.webp",
+      "ArchGenAI-Codex新功能炸了！你干活，它看着，然后替-image_11.webp",
+      "ArchGenAI-Codex新功能炸了！你干活，它看着，然后替-image_12.webp",
+      "ArchGenAI-Codex新功能炸了！你干活，它看着，然后替-image_13.webp",
+      "ArchGenAI-Codex新功能炸了！你干活，它看着，然后替-image_14.webp",
+      "ArchGenAI-Codex新功能炸了！你干活，它看着，然后替-image_15.webp",
+      "ArchGenAI-Codex新功能炸了！你干活，它看着，然后替-image_16.webp",
+      "ArchGenAI-Codex新功能炸了！你干活，它看着，然后替-image_17.webp",
+      "ArchGenAI-Codex新功能炸了！你干活，它看着，然后替-image_18.webp"
+    ]
+  },
+  {
+    "name": "by_hazel榛子-Howto用Codex给自己搭建了达人工作流SOP📚",
+    "title": "Howto用Codex给自己搭建了达人工作流SOP📚",
+    "platform": "xhs",
+    "contentType": "video",
+    "mediaComplete": true,
+    "expected": [
+      "author_avatar",
+      "cover",
+      "video_thumbnail",
+      "first_frame",
+      "video"
+    ],
+    "present": [
+      "author_avatar",
+      "cover",
+      "first_frame",
+      "video",
+      "video_thumbnail"
+    ],
+    "missing": [],
+    "errors": [],
+    "files": [
+      "by_hazel榛子-Howto用Codex给自己搭建了达人工作流SOP📚-author_avatar.jpg",
+      "by_hazel榛子-Howto用Codex给自己搭建了达人工作流SOP📚-cover.webp",
+      "by_hazel榛子-Howto用Codex给自己搭建了达人工作流SOP📚-first_frame.jpg",
+      "by_hazel榛子-Howto用Codex给自己搭建了达人工作流SOP📚-video.mp4",
+      "by_hazel榛子-Howto用Codex给自己搭建了达人工作流SOP📚-video_thumbnail.webp"
+    ]
+  },
+  {
+    "name": "by_hazel榛子-Howto用Codex给自己搭建了达人工作流SOP📚",
+    "title": "Howto用Codex给自己搭建了达人工作流SOP📚",
+    "platform": "xhs",
+    "contentType": "video",
+    "mediaComplete": true,
+    "expected": [
+      "author_avatar",
+      "cover"
+    ],
+    "present": [
+      "author_avatar",
       "cover"
     ],
     "missing": [],
     "errors": [],
     "files": [
-      "风行体育-亮亮-好奇问一下，大家现在都用Codex搞什么项目？我建了个交流群一起交流。禁止一切广告#Codex#ClaudeCode #Agent #Vibecoding-audio.m4a",
-      "风行体育-亮亮-好奇问一下，大家现在都用Codex搞什么项目？我建了个交流群一起交流。禁止一切广告#Codex#ClaudeCode #Agent #Vibecoding-audio.mp3",
-      "风行体育-亮亮-好奇问一下，大家现在都用Codex搞什么项目？我建了个交流群一起交流。禁止一切广告#Codex#ClaudeCode #Agent #Vibecoding-cover.jpeg"
+      "by_hazel榛子-Howto用Codex给自己搭建了达人工作流SOP📚-author_avatar.jpg",
+      "by_hazel榛子-Howto用Codex给自己搭建了达人工作流SOP📚-cover.webp"
+    ]
+  },
+  {
+    "name": "by_hazel榛子-Howto用Codex给自己搭建了达人工作流SOP📚",
+    "title": "Howto用Codex给自己搭建了达人工作流SOP📚",
+    "platform": "xhs",
+    "contentType": "video",
+    "mediaComplete": true,
+    "expected": [
+      "author_avatar",
+      "cover"
+    ],
+    "present": [
+      "author_avatar",
+      "cover"
+    ],
+    "missing": [],
+    "errors": [],
+    "files": [
+      "by_hazel榛子-Howto用Codex给自己搭建了达人工作流SOP📚-author_avatar.jpg",
+      "by_hazel榛子-Howto用Codex给自己搭建了达人工作流SOP📚-cover.webp"
+    ]
+  },
+  {
+    "name": "小澈的赛博茶水间-AI写的稿一眼假？差这几个去味skill",
+    "title": "AI写的稿一眼假？差这几个去味skill",
+    "platform": "xhs",
+    "contentType": "image",
+    "mediaComplete": true,
+    "expected": [
+      "author_avatar",
+      "cover",
+      "image_02",
+      "image_03",
+      "image_04"
+    ],
+    "present": [
+      "author_avatar",
+      "cover",
+      "image_02",
+      "image_03",
+      "image_04"
+    ],
+    "missing": [],
+    "errors": [],
+    "files": [
+      "小澈的赛博茶水间-AI写的稿一眼假？差这几个去味skill-author_avatar.jpg",
+      "小澈的赛博茶水间-AI写的稿一眼假？差这几个去味skill-cover.webp",
+      "小澈的赛博茶水间-AI写的稿一眼假？差这几个去味skill-image_02.webp",
+      "小澈的赛博茶水间-AI写的稿一眼假？差这几个去味skill-image_03.webp",
+      "小澈的赛博茶水间-AI写的稿一眼假？差这几个去味skill-image_04.webp"
+    ]
+  },
+  {
+    "name": "小澈的赛博茶水间-AI写的稿一眼假？差这几个去味skill",
+    "title": "AI写的稿一眼假？差这几个去味skill",
+    "platform": "xhs",
+    "contentType": "image",
+    "mediaComplete": true,
+    "expected": [
+      "author_avatar",
+      "cover",
+      "image_02",
+      "image_03",
+      "image_04"
+    ],
+    "present": [
+      "author_avatar",
+      "cover",
+      "image_02",
+      "image_03",
+      "image_04"
+    ],
+    "missing": [],
+    "errors": [],
+    "files": [
+      "小澈的赛博茶水间-AI写的稿一眼假？差这几个去味skill-author_avatar.jpg",
+      "小澈的赛博茶水间-AI写的稿一眼假？差这几个去味skill-cover.webp",
+      "小澈的赛博茶水间-AI写的稿一眼假？差这几个去味skill-image_02.webp",
+      "小澈的赛博茶水间-AI写的稿一眼假？差这几个去味skill-image_03.webp",
+      "小澈的赛博茶水间-AI写的稿一眼假？差这几个去味skill-image_04.webp"
+    ]
+  },
+  {
+    "name": "by_hazel榛子-Howto用Codex给自己搭建了达人工作流SOP📚",
+    "title": "Howto用Codex给自己搭建了达人工作流SOP📚",
+    "platform": "xhs",
+    "contentType": "video",
+    "mediaComplete": true,
+    "expected": [
+      "author_avatar",
+      "cover"
+    ],
+    "present": [
+      "author_avatar",
+      "cover"
+    ],
+    "missing": [],
+    "errors": [],
+    "files": [
+      "by_hazel榛子-Howto用Codex给自己搭建了达人工作流SOP📚-author_avatar.jpg",
+      "by_hazel榛子-Howto用Codex给自己搭建了达人工作流SOP📚-cover.webp"
+    ]
+  },
+  {
+    "name": "by_hazel榛子-Howto用Codex给自己搭建了达人工作流SOP📚",
+    "title": "Howto用Codex给自己搭建了达人工作流SOP📚",
+    "platform": "xhs",
+    "contentType": "video",
+    "mediaComplete": true,
+    "expected": [
+      "author_avatar",
+      "cover",
+      "video_thumbnail",
+      "first_frame",
+      "video"
+    ],
+    "present": [
+      "author_avatar",
+      "cover",
+      "first_frame",
+      "video",
+      "video_thumbnail"
+    ],
+    "missing": [],
+    "errors": [],
+    "files": [
+      "by_hazel榛子-Howto用Codex给自己搭建了达人工作流SOP📚-author_avatar.jpg",
+      "by_hazel榛子-Howto用Codex给自己搭建了达人工作流SOP📚-cover.webp",
+      "by_hazel榛子-Howto用Codex给自己搭建了达人工作流SOP📚-first_frame.jpg",
+      "by_hazel榛子-Howto用Codex给自己搭建了达人工作流SOP📚-video.mp4",
+      "by_hazel榛子-Howto用Codex给自己搭建了达人工作流SOP📚-video_thumbnail.webp"
+    ]
+  },
+  {
+    "name": "王十三AI-告别“AI味”，把个人简历变成创意交互网站",
+    "title": "告别“AI味”，把个人简历变成创意交互网站",
+    "platform": "xhs",
+    "contentType": "video",
+    "mediaComplete": false,
+    "expected": [
+      "author_avatar",
+      "cover",
+      "video_thumbnail",
+      "first_frame",
+      "video"
+    ],
+    "present": [
+      "author_avatar",
+      "cover",
+      "video",
+      "video_thumbnail"
+    ],
+    "missing": [
+      "first_frame"
+    ],
+    "errors": [],
+    "files": [
+      "王十三AI-告别“AI味”，把个人简历变成创意交互网站-author_avatar.jpg",
+      "王十三AI-告别“AI味”，把个人简历变成创意交互网站-cover.webp",
+      "王十三AI-告别“AI味”，把个人简历变成创意交互网站-video.mp4",
+      "王十三AI-告别“AI味”，把个人简历变成创意交互网站-video_thumbnail.webp"
+    ]
+  },
+  {
+    "name": "香菜不香1-零基础用vibe coding制作个人网站",
+    "title": "零基础用vibe coding制作个人网站",
+    "platform": "xhs",
+    "contentType": "image",
+    "mediaComplete": true,
+    "expected": [
+      "author_avatar",
+      "cover",
+      "image_02",
+      "image_03",
+      "image_04"
+    ],
+    "present": [
+      "author_avatar",
+      "cover",
+      "image_02",
+      "image_03",
+      "image_04"
+    ],
+    "missing": [],
+    "errors": [],
+    "files": [
+      "香菜不香1-零基础用vibe coding制作个人网站-author_avatar.jpg",
+      "香菜不香1-零基础用vibe coding制作个人网站-cover.webp",
+      "香菜不香1-零基础用vibe coding制作个人网站-image_02.webp",
+      "香菜不香1-零基础用vibe coding制作个人网站-image_03.webp",
+      "香菜不香1-零基础用vibe coding制作个人网站-image_04.webp"
     ]
   }
 ]

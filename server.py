@@ -49,6 +49,7 @@ MEDIA_QPS_PER_TASK = MEDIA_QPS_LIMIT / MAX_COLLECT_WORKERS
 MEDIA_WORKERS_PER_TASK = max(1, min(10, int(os.environ.get("LINK_MEDIA_WORKERS_PER_TASK", str(max(1, int(MEDIA_QPS_PER_TASK)))) or "1")))
 SAFE_VIEWER_SUFFIXES = {".html", ".js", ".css", ".png", ".jpg", ".jpeg", ".webp", ".svg", ".ico"}
 SAFE_MEDIA_SUFFIXES = {".jpg", ".jpeg", ".png", ".webp", ".gif", ".mp4", ".m4a", ".mp3", ".bin"}
+URL_PATTERN = re.compile(r"https?://[^\s\"'<>)\]]+")
 APP_APK_PATH = "/downloads/social-media-claw-debug.apk"
 APP_APK_URL = os.environ.get("LINK_APP_DOWNLOAD_URL")
 APP_APK_SHA256 = os.environ.get("LINK_APP_APK_SHA256", "")
@@ -169,10 +170,13 @@ def detect_platform(source: str, requested: str) -> str:
     if requested in COLLECTORS:
         return requested
     lowered = source.lower()
-    if any(token in lowered for token in ("xiaohongshu.com", "xhslink.com", "xhs.cn", "小红书")):
-        return "xhs"
-    if any(token in lowered for token in ("douyin.com", "iesdouyin.com", "v.douyin.com", "抖音")):
-        return "douyin"
+    for match in URL_PATTERN.finditer(lowered):
+        parsed = urllib.parse.urlparse(match.group())
+        host = (parsed.netloc or "").lower()
+        if host.endswith(("xhslink.com", "xiaohongshu.com", "xhs.cn")):
+            return "xhs"
+        if host.endswith(("douyin.com", "iesdouyin.com", "v.douyin.com")):
+            return "douyin"
     raise ValueError("无法判断链接平台，请选择小红书或抖音后再采集。")
 
 
@@ -972,7 +976,7 @@ def collect_task_public(task: dict[str, Any], include_result: bool = False) -> d
         "source": str(task.get("source") or ""),
         "platform": str(task.get("platform") or "auto"),
         "contentType": str(task.get("content_type") or "auto"),
-        "downloadMedia": bool(task.get("download_media", True)),
+        "downloadMedia": True,
         "title": str(task.get("title") or compact_source_title(str(task.get("source") or ""))),
         "status": str(task.get("status") or "queued"),
         "error": task.get("error") or "",
@@ -1018,7 +1022,7 @@ def load_collect_tasks() -> None:
             task.setdefault("source", "")
             task.setdefault("platform", "auto")
             task.setdefault("content_type", "auto")
-            task.setdefault("download_media", True)
+            task["download_media"] = True
             task.setdefault("title", compact_source_title(str(task.get("source") or "")))
             task.setdefault("status", "queued")
             task.setdefault("error", "")
@@ -1048,14 +1052,14 @@ def trim_collect_tasks() -> None:
         COLLECT_TASKS.pop(old_id, None)
 
 
-def create_collect_task(source: str, platform: str, download_media: bool, content_type: str = "auto") -> dict[str, Any]:
+def create_collect_task(source: str, platform: str, content_type: str = "auto") -> dict[str, Any]:
     task_id = uuid.uuid4().hex
     task = {
         "id": task_id,
         "source": source,
         "platform": platform,
         "content_type": content_type,
-        "download_media": download_media,
+        "download_media": True,
         "title": compact_source_title(source),
         "status": "queued",
         "error": "",
@@ -1116,7 +1120,7 @@ def collect_worker() -> None:
                 task["updated_at"] = now_ms()
                 source = task["source"]
                 platform = task["platform"]
-                download_media = bool(task["download_media"])
+                download_media = True
                 content_type = str(task.get("content_type") or "auto")
             try:
                 result = collect_source(source, platform, download_media, content_type)
@@ -1416,7 +1420,6 @@ class Handler(SimpleHTTPRequestHandler):
             source = str(payload.get("source") or "").strip()
             requested_platform = str(payload.get("platform") or "auto").strip().lower()
             content_type = str(payload.get("contentType") or "auto").strip().lower()
-            download_media = bool(payload.get("downloadMedia", True))
             if not source:
                 raise ValueError("请先粘贴链接或分享文本。")
             platform = detect_platform(source, requested_platform)
@@ -1428,7 +1431,7 @@ class Handler(SimpleHTTPRequestHandler):
             json_response(self, HTTPStatus.BAD_REQUEST, {"ok": False, "error": str(exc)})
             return
 
-        task = create_collect_task(source, platform, download_media, content_type)
+        task = create_collect_task(source, platform, content_type)
         json_response(
             self,
             HTTPStatus.ACCEPTED,

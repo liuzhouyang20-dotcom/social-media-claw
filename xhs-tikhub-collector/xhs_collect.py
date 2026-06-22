@@ -170,6 +170,26 @@ def looks_successful(data: dict[str, Any]) -> bool:
     return False
 
 
+def has_collectable_note_payload(data: dict[str, Any], source: str) -> bool:
+    if find_note_item(data, source):
+        return True
+    if primary_media(data, source):
+        return True
+    payload = data.get("data")
+    if payload in (None, "", [], {}):
+        return False
+    summary = summarize(data, "validation", source)
+    return any(summary.get(key) for key in ("title", "description", "nickname", "note_id"))
+
+
+def incomplete_note_payload_reason(data: dict[str, Any], source: str) -> str | None:
+    item = find_note_item(data, source) or {}
+    note_type = str(item.get("type") or "").lower()
+    if note_type == "video" and not primary_media(data, source).get("video"):
+        return "API returned a video note without a video URL"
+    return None
+
+
 def text_values(value: Any) -> list[str]:
     values: list[str] = []
     if isinstance(value, dict):
@@ -842,7 +862,10 @@ def call_note_api(
     elif note_type == "auto" and inferred_type == "image":
         order = ["image"]
     elif note_type == "auto":
-        order = ["web_v3"] if note_id and xsec_token else ["app_v1"]
+        order = ["image", "video"]
+        if note_id and xsec_token:
+            order.append("web_v3")
+        order.append("app_v1")
     else:
         order = [note_type]
     if fallback and note_type != "auto" and "app_v1" not in order:
@@ -865,6 +888,16 @@ def call_note_api(
             continue
 
         if looks_successful(data):
+            if not has_collectable_note_payload(data, resolved_source):
+                errors.append(
+                    f"{endpoint_name}: API returned success but note detail payload is empty; "
+                    "the note may be unavailable, expired, private, or blocked by xsec_token."
+                )
+                continue
+            incomplete_reason = incomplete_note_payload_reason(data, resolved_source)
+            if incomplete_reason and note_type == "auto":
+                errors.append(f"{endpoint_name}: {incomplete_reason}")
+                continue
             return endpoint_name, data
         message = data.get("message") or data.get("msg") or data.get("code")
         errors.append(f"{endpoint_name}: API returned non-success response: {message}")
@@ -924,6 +957,14 @@ def parse_args() -> argparse.Namespace:
 
 
 def main() -> int:
+    for stream_name in ("stdout", "stderr"):
+        stream = getattr(sys, stream_name, None)
+        if stream and hasattr(stream, "reconfigure"):
+            try:
+                stream.reconfigure(encoding="utf-8")
+            except Exception:
+                pass
+
     args = parse_args()
     load_dotenv(Path(args.env_file))
 

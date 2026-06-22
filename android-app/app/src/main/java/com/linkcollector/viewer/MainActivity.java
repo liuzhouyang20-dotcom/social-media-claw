@@ -33,11 +33,13 @@ import android.text.InputType;
 import android.text.TextWatcher;
 import android.util.Base64;
 import android.util.Log;
+import android.util.Size;
 import android.view.Gravity;
 import android.view.MotionEvent;
 import android.view.View;
 import android.widget.Button;
 import android.widget.CheckBox;
+import android.widget.HorizontalScrollView;
 import android.widget.EditText;
 import android.widget.FrameLayout;
 import android.widget.ImageButton;
@@ -67,6 +69,8 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Iterator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -82,6 +86,8 @@ public class MainActivity extends Activity {
     private static final String KEY_BASE_URL = "base_url";
     private static final String KEY_USERNAME = "username";
     private static final String KEY_PASSWORD = "password";
+    private static final String KEY_ITEMS_CACHE = "items_cache_v2";
+    private static final String KEY_SEARCH_HISTORY_CACHE = "search_history_cache";
     private static final String DEFAULT_BASE_URL = "http://49.51.72.63:8910";
     private static final String DEFAULT_USERNAME = "your-username";
     private static final int COLLECT_POLL_INTERVAL_MS = 3000;
@@ -92,10 +98,14 @@ public class MainActivity extends Activity {
     private static final String[] SEARCH_PLATFORM_LABELS = {"全部", "小红书", "抖音"};
     private static final String[] SEARCH_CONTENT_VALUES = {"all", "video", "image"};
     private static final String[] SEARCH_CONTENT_LABELS = {"全部", "视频", "图文"};
+    private static final int IMAGE_MAX_EDGE_PX = 1600;
+    private static final int DETAIL_IMAGE_MAX_EDGE_PX = 1280;
+    private static final long IMAGE_CACHE_MAX_BYTES = 32L * 1024L * 1024L;
 
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private final ExecutorService executor = Executors.newFixedThreadPool(4);
-    private final Map<String, Bitmap> imageCache = new HashMap<>();
+    private final Map<String, Bitmap> imageCache = new LinkedHashMap<>(32, 0.75f, true);
+    private long imageCacheBytes = 0;
     private final Map<String, Float> imageRatioCache = new HashMap<>();
     private final List<FeedItem> items = new ArrayList<>();
     private final List<CollectTask> collectTasks = new ArrayList<>();
@@ -127,7 +137,6 @@ public class MainActivity extends Activity {
     private TextView loginStatus;
     private Button loginButton;
     private EditText collectSourceInput;
-    private CheckBox collectDownloadCheck;
     private TextView collectStatus;
     private TextView collectTaskCountLabel;
     private LinearLayout collectTaskList;
@@ -309,7 +318,7 @@ public class MainActivity extends Activity {
         row.addView(tabs, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1));
 
         ImageButton searchButton = createIconButton(com.linkcollector.viewer.R.drawable.ic_antd_search_outlined, "搜索");
-        searchButton.setVisibility(View.INVISIBLE);
+        searchButton.setOnClickListener(view -> Toast.makeText(this, "搜索功能稍后开放", Toast.LENGTH_SHORT).show());
         row.addView(searchButton, new LinearLayout.LayoutParams(dp(46), LinearLayout.LayoutParams.MATCH_PARENT));
 
         View line = new View(this);
@@ -571,6 +580,7 @@ public class MainActivity extends Activity {
         loginView.setVisibility(View.GONE);
         appShell.setVisibility(View.VISIBLE);
         showHome();
+        loadCachedItems();
         refreshItems();
         if (pendingSharedText != null && !pendingSharedText.trim().isEmpty()) {
             String text = pendingSharedText;
@@ -891,66 +901,83 @@ public class MainActivity extends Activity {
         LinearLayout row = new LinearLayout(this);
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL);
-        row.setPadding(dp(8), dp(8), dp(10), dp(4));
-        page.addView(row, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(58)));
+        row.setPadding(dp(6), dp(8), dp(10), dp(6));
+        page.addView(row, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(60)));
 
-        TextView back = new TextView(this);
-        back.setText("‹");
-        back.setTextSize(36);
-        back.setGravity(Gravity.CENTER);
+        ImageButton back = createIconButton(com.linkcollector.viewer.R.drawable.ic_antd_arrow_left_outlined, "返回");
+        back.setColorFilter(0xFF202020);
+        back.setPadding(dp(6), dp(6), dp(6), dp(6));
         back.setOnClickListener(view -> showHome());
-        row.addView(back, new LinearLayout.LayoutParams(dp(34), LinearLayout.LayoutParams.MATCH_PARENT));
+        row.addView(back, new LinearLayout.LayoutParams(dp(36), dp(36)));
 
         LinearLayout searchBox = new LinearLayout(this);
         searchBox.setOrientation(LinearLayout.HORIZONTAL);
         searchBox.setGravity(Gravity.CENTER_VERTICAL);
         searchBox.setPadding(dp(10), 0, dp(8), 0);
-        searchBox.setBackground(cardBackground(999, 0xFFF7F7F7, 0x12000000));
-        row.addView(searchBox, new LinearLayout.LayoutParams(0, dp(44), 1));
+        searchBox.setBackground(cardBackground(999, 0xFFFFFFFF, 0x10000000));
+        LinearLayout.LayoutParams searchBoxParams = new LinearLayout.LayoutParams(0, dp(42), 1);
+        searchBoxParams.setMargins(dp(6), 0, dp(8), 0);
+        row.addView(searchBox, searchBoxParams);
+
+        LinearLayout platformPicker = new LinearLayout(this);
+        platformPicker.setGravity(Gravity.CENTER);
+        platformPicker.setOrientation(LinearLayout.HORIZONTAL);
+        platformPicker.setOnClickListener(view -> chooseSearchPlatform());
+        searchBox.addView(platformPicker, new LinearLayout.LayoutParams(dp(56), LinearLayout.LayoutParams.MATCH_PARENT));
 
         searchPlatformButton = new TextView(this);
         searchPlatformButton.setText(searchPlatformLabel());
-        searchPlatformButton.setTextSize(14);
+        searchPlatformButton.setTextSize(13);
         searchPlatformButton.setTextColor(0xFF555555);
         searchPlatformButton.setGravity(Gravity.CENTER);
         searchPlatformButton.setSingleLine(true);
-        searchPlatformButton.setOnClickListener(view -> chooseSearchPlatform());
-        searchBox.addView(searchPlatformButton, new LinearLayout.LayoutParams(dp(58), LinearLayout.LayoutParams.MATCH_PARENT));
+        searchPlatformButton.setIncludeFontPadding(false);
+        searchPlatformButton.setTypeface(Typeface.create("sans-serif", Typeface.NORMAL));
+        platformPicker.addView(searchPlatformButton, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.MATCH_PARENT));
+
+        ImageView platformArrow = new ImageView(this);
+        platformArrow.setImageResource(com.linkcollector.viewer.R.drawable.ic_antd_down_outlined);
+        platformArrow.setColorFilter(0xFF555555);
+        LinearLayout.LayoutParams arrowParams = new LinearLayout.LayoutParams(dp(10), dp(10));
+        arrowParams.setMargins(dp(2), 0, 0, 0);
+        platformPicker.addView(platformArrow, arrowParams);
 
         View divider = new View(this);
         divider.setBackgroundColor(0xFFE6E6E6);
-        searchBox.addView(divider, new LinearLayout.LayoutParams(Math.max(1, dp(1)), dp(22)));
+        searchBox.addView(divider, new LinearLayout.LayoutParams(Math.max(1, dp(1)), dp(20)));
 
         searchInput = new EditText(this);
         searchInput.setText(query);
         searchInput.setHint(searchEntryMode.equals("author") ? "搜索作者昵称" : "搜索帖子标题 / 正文 / 作者");
         searchInput.setSingleLine(true);
-        searchInput.setTextSize(17);
+        searchInput.setTextSize(14);
         searchInput.setTextColor(0xFF222222);
         searchInput.setHintTextColor(0xFF9B9B9B);
         searchInput.setPadding(dp(10), 0, dp(6), 0);
         searchInput.setBackground(new ColorDrawable(0x00000000));
+        searchInput.setIncludeFontPadding(false);
+        searchInput.setTypeface(Typeface.create("sans-serif", Typeface.NORMAL));
         searchBox.addView(searchInput, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1));
 
-        TextView clear = new TextView(this);
-        clear.setText("×");
-        clear.setTextSize(23);
-        clear.setTextColor(0xFF999999);
-        clear.setGravity(Gravity.CENTER);
+        ImageButton clear = createIconButton(com.linkcollector.viewer.R.drawable.ic_antd_close_outlined, "清空");
+        clear.setColorFilter(0xFF999999);
+        clear.setPadding(dp(7), dp(7), dp(7), dp(7));
         clear.setOnClickListener(view -> {
             searchInput.setText("");
             searchItems.clear();
             renderSearchBody(false);
         });
-        searchBox.addView(clear, new LinearLayout.LayoutParams(dp(30), LinearLayout.LayoutParams.MATCH_PARENT));
+        searchBox.addView(clear, new LinearLayout.LayoutParams(dp(36), LinearLayout.LayoutParams.MATCH_PARENT));
 
         TextView submit = new TextView(this);
         submit.setText("搜索");
-        submit.setTextSize(17);
+        submit.setTextSize(15);
         submit.setTextColor(0xFFFF2442);
         submit.setGravity(Gravity.CENTER);
+        submit.setIncludeFontPadding(false);
+        submit.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
         submit.setOnClickListener(view -> performSearch(false));
-        row.addView(submit, new LinearLayout.LayoutParams(dp(58), LinearLayout.LayoutParams.MATCH_PARENT));
+        row.addView(submit, new LinearLayout.LayoutParams(dp(44), dp(42)));
 
         searchBody = new LinearLayout(this);
         searchBody.setOrientation(LinearLayout.VERTICAL);
@@ -985,9 +1012,9 @@ public class MainActivity extends Activity {
     }
 
     private String searchPlatformLabel() {
-        if ("xhs".equals(searchPlatform)) return "小红书⌄";
-        if ("douyin".equals(searchPlatform)) return "抖音⌄";
-        return "全部⌄";
+        if ("xhs".equals(searchPlatform)) return "小红书";
+        if ("douyin".equals(searchPlatform)) return "抖音";
+        return "全部";
     }
 
     private void renderSearchBody(boolean resultsMode) {
@@ -1017,25 +1044,6 @@ public class MainActivity extends Activity {
         container.addView(searchHistoryList);
         renderSearchHistory();
 
-        View line = new View(this);
-        line.setBackgroundColor(0xFFF0F0F0);
-        LinearLayout.LayoutParams lineParams = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, Math.max(1, dp(1)));
-        lineParams.setMargins(0, dp(14), 0, dp(14));
-        container.addView(line, lineParams);
-
-        container.addView(sectionHeader("猜你想搜", "换一换"));
-        LinearLayout suggestions = new LinearLayout(this);
-        suggestions.setOrientation(LinearLayout.VERTICAL);
-        container.addView(suggestions);
-        for (int i = 0; i < Math.min(8, searchTerms.size()); i += 2) {
-            LinearLayout row = new LinearLayout(this);
-            row.setOrientation(LinearLayout.HORIZONTAL);
-            suggestions.addView(row, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(46)));
-            row.addView(suggestionText(searchTerms.get(i), i == 0 || i == 1), new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1));
-            if (i + 1 < searchTerms.size()) {
-                row.addView(suggestionText(searchTerms.get(i + 1), i == 0 || i == 1), new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1));
-            }
-        }
         searchBody.addView(scrollView, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.MATCH_PARENT));
     }
 
@@ -1381,6 +1389,20 @@ public class MainActivity extends Activity {
             }
             searchItems.clear();
             searchItems.addAll(matched);
+            SearchHistoryItem historyItem = new SearchHistoryItem();
+            historyItem.id = keyword + "|" + searchPlatform + "|" + searchContentType + "|" + searchEntryMode;
+            historyItem.keyword = keyword;
+            historyItem.platform = searchPlatform;
+            historyItem.filterSummary = searchEntryMode + "|" + searchContentType;
+            historyItem.createdAt = System.currentTimeMillis();
+            historyItem.resultCount = matched.size();
+            searchHistory.removeIf(item -> historyItem.id.equals(item.id));
+            searchHistory.add(0, historyItem);
+            while (searchHistory.size() > 20) {
+                searchHistory.remove(searchHistory.size() - 1);
+            }
+            saveSearchHistory();
+            renderSearchHistory();
             searchingRemote = false;
             searchHasMore = false;
             loadingMoreSearch = false;
@@ -1413,6 +1435,16 @@ public class MainActivity extends Activity {
 
     private void loadSearchHistory() {
         searchHistory.clear();
+        String cached = preferences.getString(KEY_SEARCH_HISTORY_CACHE, "");
+        if (cached != null && !cached.trim().isEmpty()) {
+            try {
+                JSONArray array = new JSONArray(cached);
+                for (int i = 0; i < array.length(); i++) {
+                    searchHistory.add(SearchHistoryItem.fromJson(array.optJSONObject(i)));
+                }
+            } catch (Exception ignored) {
+            }
+        }
         renderSearchHistory();
     }
 
@@ -1440,11 +1472,24 @@ public class MainActivity extends Activity {
     private void deleteSearchHistory(String id) {
         if (id == null || id.isEmpty()) {
             searchHistory.clear();
+            saveSearchHistory();
             renderSearchHistory();
             return;
         }
         searchHistory.removeIf(item -> id.equals(item.id));
+        saveSearchHistory();
         renderSearchHistory();
+    }
+
+    private void saveSearchHistory() {
+        try {
+            JSONArray array = new JSONArray();
+            for (SearchHistoryItem item : searchHistory) {
+                array.put(item.toJson());
+            }
+            preferences.edit().putString(KEY_SEARCH_HISTORY_CACHE, array.toString()).apply();
+        } catch (Exception ignored) {
+        }
     }
 
     private void loadMoreSearchResults() {
@@ -1591,18 +1636,10 @@ public class MainActivity extends Activity {
         inputPanel.addView(collectSourceInput, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(112)));
 
         LinearLayout optionRow = new LinearLayout(this);
-        optionRow.setGravity(Gravity.CENTER_VERTICAL);
+        optionRow.setGravity(Gravity.CENTER_VERTICAL | Gravity.END);
         LinearLayout.LayoutParams optionParams = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(46));
         optionParams.setMargins(0, dp(10), 0, 0);
         hero.addView(optionRow, optionParams);
-
-        collectDownloadCheck = new CheckBox(this);
-        collectDownloadCheck.setText("下载媒体文件");
-        collectDownloadCheck.setTextSize(15);
-        collectDownloadCheck.setTextColor(0xFF28302D);
-        collectDownloadCheck.setChecked(true);
-        collectDownloadCheck.setButtonTintList(android.content.res.ColorStateList.valueOf(0xFF0F8B7B));
-        optionRow.addView(collectDownloadCheck, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1));
 
         TextView queueHint = collectPill("后台队列", 0xFFEFEFED, 0xFF68716E);
         optionRow.addView(queueHint, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, dp(30)));
@@ -1726,7 +1763,7 @@ public class MainActivity extends Activity {
         back.setTextSize(42);
         back.setGravity(Gravity.CENTER);
         back.setIncludeFontPadding(false);
-        back.setOnClickListener(view -> closeDetailToHome());
+        back.setOnClickListener(view -> closeDetail());
         topBar.addView(back, new LinearLayout.LayoutParams(dp(44), LinearLayout.LayoutParams.MATCH_PARENT));
 
         View topSpace = new View(this);
@@ -1870,9 +1907,11 @@ public class MainActivity extends Activity {
             detailVideoView = video;
             final String[] activeVideo = {item.playableVideo()};
             setVideoSource(video, activeVideo[0]);
+            probeVideoSource(activeVideo[0]);
             video.setOnPreparedListener((MediaPlayer mp) -> {
                 mp.setLooping(true);
                 duration.setText(formatDuration(mp.getDuration()));
+                Log.i(TAG, "Video prepared url=" + mediaUrl(activeVideo[0]) + " durationMs=" + mp.getDuration());
                 playbackStatus.setVisibility(View.GONE);
                 poster.setVisibility(View.GONE);
                 video.setVisibility(View.VISIBLE);
@@ -1895,10 +1934,55 @@ public class MainActivity extends Activity {
 
     private void setVideoSource(VideoView video, String rawUrl) {
         String url = mediaUrl(rawUrl);
+        Log.i(TAG, "Video source resolved raw=" + rawUrl + " resolved=" + url);
         Map<String, String> headers = new HashMap<>();
         headers.put("User-Agent", "Mozilla/5.0 LinkCollectorViewer/1.0");
         headers.put("Accept", "video/mp4,video/*;q=0.9,*/*;q=0.8");
         video.setVideoURI(Uri.parse(url), headers);
+    }
+
+    private void probeVideoSource(String rawUrl) {
+        final String url = mediaUrl(rawUrl);
+        executor.execute(() -> {
+            HttpURLConnection connection = null;
+            try {
+                Log.i(TAG, "Video probe start url=" + url);
+                URL target = new URL(url);
+                connection = (HttpURLConnection) target.openConnection();
+                connection.setRequestMethod("GET");
+                connection.setConnectTimeout(8000);
+                connection.setReadTimeout(8000);
+                connection.setInstanceFollowRedirects(true);
+                connection.setRequestProperty("User-Agent", "Mozilla/5.0 LinkCollectorViewer/1.0");
+                connection.setRequestProperty("Accept", "video/mp4,video/*;q=0.9,*/*;q=0.8");
+                connection.setRequestProperty("Range", "bytes=0-1");
+                int code = connection.getResponseCode();
+                String contentType = connection.getContentType();
+                String contentRange = connection.getHeaderField("Content-Range");
+                String acceptRanges = connection.getHeaderField("Accept-Ranges");
+                String length = connection.getHeaderField("Content-Length");
+                Log.i(TAG, "Video probe result code=" + code
+                        + " type=" + contentType
+                        + " range=" + contentRange
+                        + " acceptRanges=" + acceptRanges
+                        + " length=" + length
+                        + " url=" + url);
+                try (InputStream stream = code >= 200 && code < 400 ? connection.getInputStream() : connection.getErrorStream()) {
+                    if (stream != null) {
+                        byte[] buffer = new byte[256];
+                        while (stream.read(buffer) > 0) {
+                            break;
+                        }
+                    }
+                }
+            } catch (Exception exception) {
+                Log.w(TAG, "Video probe failed url=" + url + " error=" + exception.getMessage(), exception);
+            } finally {
+                if (connection != null) {
+                    connection.disconnect();
+                }
+            }
+        });
     }
 
     private View createDetailView(FeedItem item) {
@@ -1912,12 +1996,12 @@ public class MainActivity extends Activity {
         bar.setPadding(dp(8), statusBarInset, dp(16), 0);
         page.addView(bar, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, statusBarInset + dp(54)));
 
-        TextView back = new TextView(this);
-        back.setText("‹");
-        back.setTextSize(38);
-        back.setGravity(Gravity.CENTER);
-        back.setOnClickListener(view -> closeDetailToHome());
-        bar.addView(back, new LinearLayout.LayoutParams(dp(42), LinearLayout.LayoutParams.MATCH_PARENT));
+        ImageButton back = createIconButton(com.linkcollector.viewer.R.drawable.ic_antd_arrow_left_outlined, "返回");
+        back.setColorFilter(0xFF202020);
+        back.setPadding(dp(7), dp(7), dp(7), dp(7));
+        back.setOnClickListener(view -> closeDetail());
+        LinearLayout.LayoutParams backParams = new LinearLayout.LayoutParams(dp(38), dp(38));
+        bar.addView(back, backParams);
 
         ImageView avatar = new ImageView(this);
         avatar.setBackground(circleBackground(0xFFE6F0F4));
@@ -1936,39 +2020,78 @@ public class MainActivity extends Activity {
         ScrollView scroll = new ScrollView(this);
         LinearLayout body = new LinearLayout(this);
         body.setOrientation(LinearLayout.VERTICAL);
-        body.setPadding(dp(22), 0, dp(22), dp(24));
+        body.setPadding(0, 0, 0, dp(24));
         scroll.addView(body);
         page.addView(scroll, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1));
 
-        ImageView cover = new ImageView(this);
-        cover.setScaleType(ImageView.ScaleType.CENTER_CROP);
-        cover.setBackgroundColor(0xFFF1F1F1);
-        body.addView(cover, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(360)));
-        loadImageInto(item.cover, cover, false);
+        List<String> detailImages = item.detailImages();
+        if (!detailImages.isEmpty()) {
+            FrameLayout mediaFrame = new FrameLayout(this);
+            mediaFrame.setBackgroundColor(0xFFF1F1F1);
+            int imageHeight = Math.round(getResources().getDisplayMetrics().widthPixels * 1.25f);
+            body.addView(mediaFrame, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, imageHeight));
+
+            HorizontalScrollView pager = new HorizontalScrollView(this);
+            pager.setHorizontalScrollBarEnabled(false);
+            pager.setOverScrollMode(View.OVER_SCROLL_NEVER);
+            pager.setFillViewport(true);
+            mediaFrame.addView(pager, new FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
+
+            LinearLayout strip = new LinearLayout(this);
+            strip.setOrientation(LinearLayout.HORIZONTAL);
+            pager.addView(strip, new HorizontalScrollView.LayoutParams(HorizontalScrollView.LayoutParams.WRAP_CONTENT, HorizontalScrollView.LayoutParams.MATCH_PARENT));
+
+            List<ImageView> imageViews = new ArrayList<>();
+            for (String imageUrl : detailImages) {
+                ImageView image = new ImageView(this);
+                image.setScaleType(ImageView.ScaleType.FIT_CENTER);
+                image.setBackgroundColor(0xFFF1F1F1);
+                strip.addView(image, new LinearLayout.LayoutParams(getResources().getDisplayMetrics().widthPixels, LinearLayout.LayoutParams.MATCH_PARENT));
+                imageViews.add(image);
+            }
+
+            TextView counter = new TextView(this);
+            counter.setText("1/" + detailImages.size());
+            counter.setTextSize(13);
+            counter.setTextColor(0xFFFFFFFF);
+            counter.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+            counter.setPadding(dp(10), dp(4), dp(10), dp(4));
+            counter.setBackground(pillBackground(0x99000000));
+            FrameLayout.LayoutParams counterParams = new FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.TOP | Gravity.END);
+            counterParams.setMargins(0, dp(12), dp(12), 0);
+            mediaFrame.addView(counter, counterParams);
+            loadDetailImagesNear(detailImages, imageViews, 0);
+            pager.setOnScrollChangeListener((view, scrollX, scrollY, oldScrollX, oldScrollY) -> {
+                int width = Math.max(1, getResources().getDisplayMetrics().widthPixels);
+                int index = Math.max(0, Math.min(detailImages.size() - 1, Math.round(scrollX / (float) width)));
+                counter.setText((index + 1) + "/" + detailImages.size());
+                loadDetailImagesNear(detailImages, imageViews, index);
+            });
+        }
 
         TextView title = new TextView(this);
         title.setText(item.title);
-        title.setTextSize(24);
-        title.setTextColor(0xFF2B2B2B);
+        title.setTextSize(27);
+        title.setTextColor(0xFF111111);
         title.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
-        title.setLineSpacing(0, 1.1f);
-        LinearLayout.LayoutParams titleParams = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
-        titleParams.setMargins(0, dp(22), 0, dp(16));
-        body.addView(title, titleParams);
+        title.setLineSpacing(0, 1.08f);
+        title.setPadding(dp(16), dp(18), dp(16), 0);
+        body.addView(title);
 
         TextView desc = new TextView(this);
         desc.setText(item.description.isEmpty() ? "暂无正文。" : item.description);
-        desc.setTextSize(18);
-        desc.setTextColor(0xFF333333);
-        desc.setLineSpacing(dp(5), 1.0f);
+        desc.setTextSize(19);
+        desc.setTextColor(0xFF222222);
+        desc.setLineSpacing(dp(6), 1.03f);
+        desc.setPadding(dp(16), dp(10), dp(16), 0);
         body.addView(desc);
 
         LinearLayout actions = new LinearLayout(this);
         actions.setOrientation(LinearLayout.HORIZONTAL);
         actions.setGravity(Gravity.CENTER_VERTICAL);
-        actions.setPadding(dp(16), dp(8), dp(16), dp(10));
+        actions.setPadding(dp(16), dp(14), dp(16), dp(10));
         actions.setBackgroundColor(0xFFFFFFFF);
-        page.addView(actions, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(64)));
+        page.addView(actions, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(70)));
 
         TextView comment = new TextView(this);
         comment.setText("说点什么...");
@@ -1980,9 +2103,21 @@ public class MainActivity extends Activity {
         actions.addView(comment, new LinearLayout.LayoutParams(0, dp(42), 1));
 
         actions.addView(detailAction(com.linkcollector.viewer.R.drawable.ic_antd_heart_outlined, fmt(item.liked)));
-        actions.addView(detailTextAction("☆ " + fmt(item.collected)));
-        actions.addView(detailTextAction("☻ " + fmt(item.comments)));
+        actions.addView(detailAction(com.linkcollector.viewer.R.drawable.ic_antd_message_outlined, fmt(item.comments)));
+        actions.addView(detailAction(com.linkcollector.viewer.R.drawable.ic_antd_message_outlined, fmt(item.collected)));
         return page;
+    }
+
+    private void loadDetailImagesNear(List<String> urls, List<ImageView> views, int index) {
+        int start = Math.max(0, index);
+        int end = Math.min(urls.size() - 1, index);
+        for (int i = start; i <= end; i++) {
+            ImageView view = views.get(i);
+            Object loaded = view.getTag(com.linkcollector.viewer.R.id.detail_image_loaded);
+            if (Boolean.TRUE.equals(loaded)) continue;
+            view.setTag(com.linkcollector.viewer.R.id.detail_image_loaded, Boolean.TRUE);
+            loadImageInto(urls.get(i), view, false, false, DETAIL_IMAGE_MAX_EDGE_PX);
+        }
     }
 
     private LinearLayout detailAction(int iconRes, String text) {
@@ -1993,10 +2128,10 @@ public class MainActivity extends Activity {
         ImageView icon = new ImageView(this);
         icon.setImageResource(iconRes);
         icon.setColorFilter(0xFF666666);
-        action.addView(icon, new LinearLayout.LayoutParams(dp(22), dp(22)));
+        action.addView(icon, new LinearLayout.LayoutParams(dp(20), dp(20)));
         TextView label = new TextView(this);
         label.setText(text);
-        label.setTextSize(15);
+        label.setTextSize(16);
         label.setTextColor(0xFF444444);
         LinearLayout.LayoutParams labelParams = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
         labelParams.setMargins(dp(4), 0, 0, 0);
@@ -2097,6 +2232,7 @@ public class MainActivity extends Activity {
                 mainHandler.post(() -> {
                     items.clear();
                     items.addAll(next);
+                    saveCachedItems();
                     refreshingItems = false;
                     setLoading(false);
                     if ("home".equals(activeView)) renderHome();
@@ -2110,6 +2246,36 @@ public class MainActivity extends Activity {
                 });
             }
         });
+    }
+
+    private void loadCachedItems() {
+        String cached = preferences.getString(KEY_ITEMS_CACHE, "");
+        if (cached == null || cached.trim().isEmpty()) return;
+        try {
+            JSONArray array = new JSONArray(cached);
+            List<FeedItem> cachedItems = new ArrayList<>();
+            for (int i = 0; i < array.length(); i++) {
+                cachedItems.add(FeedItem.fromJson(array.optJSONObject(i)));
+            }
+            if (!cachedItems.isEmpty()) {
+                items.clear();
+                items.addAll(cachedItems);
+                if ("home".equals(activeView)) renderHome();
+            }
+        } catch (Exception ignored) {
+            preferences.edit().remove(KEY_ITEMS_CACHE).apply();
+        }
+    }
+
+    private void saveCachedItems() {
+        try {
+            JSONArray array = new JSONArray();
+            for (FeedItem item : items) {
+                array.put(item.toJson());
+            }
+            preferences.edit().putString(KEY_ITEMS_CACHE, array.toString()).apply();
+        } catch (Exception ignored) {
+        }
     }
 
     private List<FeedItem> filteredItems(String query, String filter) {
@@ -2134,12 +2300,11 @@ public class MainActivity extends Activity {
 
     private void submitCollect() {
         String text = collectSourceInput == null ? "" : collectSourceInput.getText().toString().trim();
-        List<String> sources = extractCollectSources(text);
+        List<String> sources = extractSupportedCollectUrls(text);
         if (sources.isEmpty()) {
             setCollectStatus(containsCollectUrl(text) ? "没有识别到可采集的小红书/抖音内容链接。" : "请先粘贴链接或分享文本。", true);
             return;
         }
-        boolean downloadMedia = collectDownloadCheck == null || collectDownloadCheck.isChecked();
         setCollectStatus(sources.size() == 1 ? "正在提交采集任务..." : "识别到 " + sources.size() + " 条，正在批量提交...", false);
         executor.execute(() -> {
             List<CollectTask> nextTasks = new ArrayList<>();
@@ -2151,7 +2316,7 @@ public class MainActivity extends Activity {
                         JSONObject payload = new JSONObject();
                         payload.put("source", source);
                         payload.put("platform", "auto");
-                        payload.put("downloadMedia", downloadMedia);
+                        payload.put("downloadMedia", true);
                         JSONObject response = postJson(baseUrl + "/api/collect", payload);
                         if (!response.optBoolean("ok")) {
                             throw new RuntimeException(response.optString("error", "采集失败"));
@@ -2211,6 +2376,18 @@ public class MainActivity extends Activity {
 
     private boolean containsCollectUrl(String text) {
         return text != null && COLLECT_URL_PATTERN.matcher(text).find();
+    }
+
+    private List<String> extractSupportedCollectUrls(String text) {
+        List<String> sources = new ArrayList<>();
+        if (text == null) return sources;
+        String normalized = text.trim();
+        if (normalized.isEmpty()) return sources;
+        Matcher matcher = COLLECT_URL_PATTERN.matcher(normalized);
+        while (matcher.find()) {
+            addCollectUrlSource(sources, matcher.group());
+        }
+        return sources;
     }
 
     private void addCollectSource(List<String> sources, String source) {
@@ -2428,7 +2605,7 @@ public class MainActivity extends Activity {
         if (appShell == null || appShell.getVisibility() != View.VISIBLE || forceUpdateRequired) return;
         String text = readClipboardText();
         if (text.isEmpty() || text.equals(lastClipboardPromptText)) return;
-        List<String> sources = extractCollectSources(text);
+        List<String> sources = extractSupportedCollectUrls(text);
         if (sources.isEmpty()) return;
         lastClipboardPromptText = text;
         showClipboardCollectPrompt(text, sources);
@@ -2710,11 +2887,15 @@ public class MainActivity extends Activity {
     }
 
     private void loadImageInto(String rawUrl, ImageView imageView, boolean circle) {
+        loadImageInto(rawUrl, imageView, circle, !circle, IMAGE_MAX_EDGE_PX);
+    }
+
+    private void loadImageInto(String rawUrl, ImageView imageView, boolean circle, boolean rounded, int maxEdgePx) {
         if (rawUrl == null || rawUrl.trim().isEmpty()) return;
         String url = mediaUrl(rawUrl);
-        String cacheKey = circle ? "circle:" + url : url;
+        String cacheKey = (circle ? "circle:" : (rounded ? "rounded:" : "plain:")) + maxEdgePx + ":" + url;
         imageView.setTag(cacheKey);
-        Bitmap cached = imageCache.get(cacheKey);
+        Bitmap cached = getCachedImage(cacheKey);
         if (cached != null) {
             imageView.setImageBitmap(cached);
             return;
@@ -2729,37 +2910,109 @@ public class MainActivity extends Activity {
                     connection.setRequestProperty("Authorization", basicAuth(username, password));
                 }
                 byte[] bytes = readBytes(connection.getInputStream());
-                Bitmap bitmap = decodeBitmap(bytes);
+                Bitmap bitmap = decodeBitmap(bytes, maxEdgePx);
                 if (bitmap != null) {
                     if (!circle && bitmap.getHeight() > 0) {
                         imageRatioCache.put(url, bitmap.getWidth() / (float) bitmap.getHeight());
                     }
-                    Bitmap displayBitmap = circle ? circleBitmap(bitmap) : roundedBitmap(bitmap, dp(3));
-                    imageCache.put(cacheKey, displayBitmap);
+                    Bitmap displayBitmap = circle ? circleBitmap(bitmap) : (rounded ? roundedBitmap(bitmap, dp(3)) : bitmap);
+                    putCachedImage(cacheKey, displayBitmap);
                     mainHandler.post(() -> {
                         if (cacheKey.equals(imageView.getTag())) {
-                            if (!circle) {
+                            if (!circle && rounded) {
                                 updateImageHeight(imageView, bitmap.getWidth() / (float) bitmap.getHeight());
                             }
                             imageView.setImageBitmap(displayBitmap);
                         }
                     });
                 }
+            } catch (OutOfMemoryError error) {
+                trimImageCacheTo(0);
+                System.gc();
             } catch (Exception ignored) {
             }
         });
     }
 
     private Bitmap decodeBitmap(byte[] bytes) {
+        return decodeBitmap(bytes, IMAGE_MAX_EDGE_PX);
+    }
+
+    private Bitmap decodeBitmap(byte[] bytes, int maxEdgePx) {
         if (bytes == null || bytes.length == 0) return null;
+        int targetMaxEdge = Math.max(1, maxEdgePx);
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
                 ImageDecoder.Source source = ImageDecoder.createSource(bytes);
-                return ImageDecoder.decodeBitmap(source, (decoder, info, src) -> decoder.setAllocator(ImageDecoder.ALLOCATOR_SOFTWARE));
+                return ImageDecoder.decodeBitmap(source, (decoder, info, src) -> {
+                    decoder.setAllocator(ImageDecoder.ALLOCATOR_SOFTWARE);
+                    Size size = info.getSize();
+                    int width = size.getWidth();
+                    int height = size.getHeight();
+                    int longest = Math.max(width, height);
+                    if (longest > targetMaxEdge && width > 0 && height > 0) {
+                        float scale = targetMaxEdge / (float) longest;
+                        decoder.setTargetSize(
+                                Math.max(1, Math.round(width * scale)),
+                                Math.max(1, Math.round(height * scale))
+                        );
+                    }
+                });
             }
         } catch (Exception ignored) {
         }
-        return BitmapFactory.decodeByteArray(bytes, 0, bytes.length);
+        BitmapFactory.Options bounds = new BitmapFactory.Options();
+        bounds.inJustDecodeBounds = true;
+        BitmapFactory.decodeByteArray(bytes, 0, bytes.length, bounds);
+        BitmapFactory.Options options = new BitmapFactory.Options();
+        options.inSampleSize = sampleSize(bounds.outWidth, bounds.outHeight, targetMaxEdge);
+        return BitmapFactory.decodeByteArray(bytes, 0, bytes.length, options);
+    }
+
+    private int sampleSize(int width, int height, int maxEdge) {
+        int sample = 1;
+        int longest = Math.max(width, height);
+        while (longest / sample > maxEdge) {
+            sample *= 2;
+        }
+        return Math.max(1, sample);
+    }
+
+    private Bitmap getCachedImage(String cacheKey) {
+        synchronized (imageCache) {
+            return imageCache.get(cacheKey);
+        }
+    }
+
+    private void putCachedImage(String cacheKey, Bitmap bitmap) {
+        synchronized (imageCache) {
+            Bitmap previous = imageCache.put(cacheKey, bitmap);
+            if (previous != null) {
+                imageCacheBytes -= bitmapByteCount(previous);
+            }
+            imageCacheBytes += bitmapByteCount(bitmap);
+            trimImageCacheTo(IMAGE_CACHE_MAX_BYTES);
+        }
+    }
+
+    private void trimImageCacheTo(long maxBytes) {
+        synchronized (imageCache) {
+            Iterator<Map.Entry<String, Bitmap>> iterator = imageCache.entrySet().iterator();
+            while (imageCacheBytes > maxBytes && iterator.hasNext()) {
+                Map.Entry<String, Bitmap> entry = iterator.next();
+                imageCacheBytes -= bitmapByteCount(entry.getValue());
+                iterator.remove();
+            }
+            if (imageCacheBytes < 0) imageCacheBytes = 0;
+        }
+    }
+
+    private long bitmapByteCount(Bitmap bitmap) {
+        if (bitmap == null) return 0;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT) {
+            return bitmap.getAllocationByteCount();
+        }
+        return (long) bitmap.getRowBytes() * bitmap.getHeight();
     }
 
     private byte[] readBytes(InputStream stream) throws Exception {
@@ -3048,6 +3301,7 @@ public class MainActivity extends Activity {
         String author = "";
         String avatar = "";
         String cover = "";
+        final List<String> images = new ArrayList<>();
         String video = "";
         String description = "";
         String platform = "";
@@ -3064,6 +3318,13 @@ public class MainActivity extends Activity {
             item.author = json.optString("author", "");
             item.avatar = json.optString("avatar", "");
             item.cover = json.optString("cover", "");
+            JSONArray images = json.optJSONArray("images");
+            if (images != null) {
+                for (int i = 0; i < images.length(); i++) {
+                    String image = images.optString(i, "");
+                    if (!image.trim().isEmpty()) item.images.add(image);
+                }
+            }
             item.video = json.optString("video", "");
             item.description = json.optString("description", "");
             item.platform = json.optString("platform", "");
@@ -3087,6 +3348,44 @@ public class MainActivity extends Activity {
         String playableVideo() {
             if (video != null && !video.trim().isEmpty()) return video;
             return "";
+        }
+
+        List<String> detailImages() {
+            List<String> list = new ArrayList<>();
+            if (cover != null && !cover.trim().isEmpty()) list.add(cover);
+            for (String image : images) {
+                if (image != null && !image.trim().isEmpty() && !list.contains(image)) {
+                    list.add(image);
+                }
+            }
+            return list;
+        }
+
+        JSONObject toJson() {
+            JSONObject json = new JSONObject();
+            try {
+                json.put("title", title);
+                json.put("author", author);
+                json.put("avatar", avatar);
+                json.put("cover", cover);
+                JSONArray imageArray = new JSONArray();
+                for (String image : images) {
+                    if (image != null && !image.trim().isEmpty()) {
+                        imageArray.put(image);
+                    }
+                }
+                json.put("images", imageArray);
+                json.put("video", video);
+                json.put("description", description);
+                json.put("platform", platform);
+                json.put("source", source);
+                json.put("isVideo", isVideo);
+                json.put("liked", liked);
+                json.put("collected", collected);
+                json.put("comments", comments);
+            } catch (Exception ignored) {
+            }
+            return json;
         }
     }
 
@@ -3160,6 +3459,20 @@ public class MainActivity extends Activity {
         String metaText() {
             String platformLabel = "all".equals(platform) ? "全部" : "xhs".equals(platform) ? "小红书" : "抖音";
             return platformLabel + " · " + resultCount + "条";
+        }
+
+        JSONObject toJson() {
+            JSONObject json = new JSONObject();
+            try {
+                json.put("id", id);
+                json.put("keyword", keyword);
+                json.put("platform", platform);
+                json.put("filterSummary", filterSummary);
+                json.put("createdAt", createdAt);
+                json.put("resultCount", resultCount);
+            } catch (Exception ignored) {
+            }
+            return json;
         }
     }
 

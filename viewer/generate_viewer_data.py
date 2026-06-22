@@ -66,6 +66,21 @@ def find_one(directory: Path, suffix: str) -> Path | None:
     return matches[0] if matches else None
 
 
+def collect_directories(root: Path) -> list[Path]:
+    seen: set[Path] = set()
+    directories: list[Path] = []
+    for summary_path in root.rglob("*-summary.json"):
+        directory = summary_path.parent.resolve()
+        if directory in seen:
+            continue
+        seen.add(directory)
+        directories.append(directory)
+    return sorted(
+        directories,
+        key=lambda path: os.path.relpath(path.resolve(), root.resolve()).replace(os.sep, "/").lower(),
+    )
+
+
 def media_files(directory: Path) -> list[Path]:
     media_dir = directory / "media"
     if not media_dir.exists():
@@ -201,6 +216,19 @@ def normalize_content_type(value: str) -> str:
     return value
 
 
+def has_collectable_display_data(summary: dict, primary: dict, media: list[Path]) -> bool:
+    identity_fields = (
+        "title",
+        "description",
+        "nickname",
+        "user_id",
+        "aweme_id",
+    )
+    if any(summary.get(field) for field in identity_fields):
+        return True
+    return bool(primary or media)
+
+
 def build_item(directory: Path) -> dict | None:
     summary_path = find_one(directory, "-summary.json")
     primary_path = find_one(directory, "-primary_media.json")
@@ -222,6 +250,8 @@ def build_item(directory: Path) -> dict | None:
     avatar = local_avatar_for(media)
     note_type = normalize_content_type(summary.get("note_type") or raw_note_type(directory))
     status = media_status(primary, media, local_record(directory))
+    if not has_collectable_display_data(summary, primary, media):
+        return None
 
     return {
         "name": directory.name,
@@ -258,13 +288,10 @@ def main() -> None:
     COLLECT_DIR.mkdir(parents=True, exist_ok=True)
 
     items = []
-    for directory in sorted(path for path in COLLECT_DIR.iterdir() if path.is_dir()):
+    for directory in collect_directories(COLLECT_DIR):
         item = build_item(directory)
         if item:
             items.append(item)
-    if not items and existing_item_count(OUT) > 0:
-        print(f"No collected items found; kept existing {OUT}")
-        return
     audit = [
         {
             "name": item["name"],

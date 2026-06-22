@@ -2461,8 +2461,10 @@
 
     function detectPlatform(text) {
       const value = text.toLowerCase();
-      if (/xiaohongshu|xhslink|xhs\.cn|小红书/.test(value)) return "xhs";
-      if (/douyin|iesdouyin|v\.douyin|抖音/.test(value)) return "douyin";
+      const xhsLink = /(?:https?:\/\/)?(?:www\.)?(?:xhslink\.com|xiaohongshu\.com|xhs\.cn)\b/i;
+      const douyinLink = /(?:https?:\/\/)?(?:www\.)?(?:douyin\.com|iesdouyin\.com|v\.douyin\.com)\b/i;
+      if (xhsLink.test(value)) return "xhs";
+      if (douyinLink.test(value)) return "douyin";
       return "";
     }
 
